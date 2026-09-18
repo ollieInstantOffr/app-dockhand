@@ -206,6 +206,22 @@ Tools are filtered by the global enable switch, the per-tool toggles in settings
 Write tools with "confirm" enabled require the argument `"confirm": true`; without it the call returns a tool error
 explaining what would happen. Every call is written to `mcp_activity`.
 
-When `settings.mcp.port` is non-zero (1024–65535) and MCP is enabled, the same endpoint is also served on a dedicated
+By default (`settings.mcp.port` = 0) MCP is only served here, on Dockhand's own port, so a deployment behind a
+reverse proxy exposes it at `<public url>/mcp` with no extra port. When `settings.mcp.port` is non-zero (1024–65535) and MCP is enabled, the same endpoint is also served on a dedicated
 listener at `:<port>/mcp` (publish that port from the container to reach it). `GET /api/mcp` then reports the URL with
 that port, `port`, and `listenError` if the listener couldn't bind.
+
+### MCP OAuth
+
+Clients that can't send a static key (Claude chat, Cowork, Claude Code without `--header`) use OAuth 2.1:
+a 401 from `/mcp` carries `WWW-Authenticate: Bearer resource_metadata="<base>/.well-known/oauth-protected-resource/mcp"`.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/.well-known/oauth-protected-resource[/mcp]` | RFC 9728 metadata |
+| GET | `/.well-known/oauth-authorization-server` | RFC 8414 metadata |
+| POST | `/oauth/register` | Dynamic client registration (RFC 7591); redirect URIs must be https or http loopback |
+| GET | `/oauth/authorize` | Validates, then redirects to the `/connect` consent page (PKCE S256 required) |
+| POST | `/oauth/token` | `authorization_code` grant; the access token is a new API key |
+| GET | `/api/oauth/request?<authorize query>` | Consent page: client name, redirect host, whether MCP is on |
+| POST | `/api/oauth/approve` | `{query, approve, scope: "read"|"full", hostIds}` → `{redirect}` |

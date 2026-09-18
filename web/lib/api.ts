@@ -28,7 +28,7 @@ export async function api<T = unknown>(path: string, opts: { method?: Method; bo
   });
   if (res.status === 401 && typeof window !== "undefined" && !path.startsWith("/api/auth/")) {
     const here = window.location.pathname;
-    if (here !== "/login" && here !== "/setup") window.location.href = "/login";
+    if (here !== "/login" && here !== "/setup") window.location.href = `/login?next=${encodeURIComponent(here + window.location.search)}`;
   }
   const text = await res.text();
   let data: unknown = undefined;

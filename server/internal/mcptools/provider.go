@@ -34,6 +34,7 @@ type Provider struct {
 	jobs     *jobs.Runner
 	catalog  map[string]mcp.Tool
 	ded      dedicated
+	oauth    oauthState
 }
 
 func New(pool *db.DB, st *settings.Store, hs *hosts.Store, mon *monitor.Monitor, ops *dockerops.Service, sk *stacks.Service,

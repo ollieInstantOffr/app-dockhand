@@ -314,9 +314,15 @@ function KeysCard() {
   );
 }
 
-type Client = "desktop" | "code" | "cursor";
+type Client = "claude" | "code" | "desktop" | "cursor";
 
 function snippet(c: Client, url: string): { text: string; hint: string } {
+  if (c === "claude") {
+    return {
+      text: url,
+      hint: "Claude chat, Cowork and the Claude apps: Settings → Connectors → Add custom connector, paste this URL and click Connect. You'll sign in to Dockhand and choose read-only or full access; no API key needed. Dockhand must be reachable from the internet over https.",
+    };
+  }
   if (c === "desktop") {
     return {
       text: JSON.stringify(
@@ -329,8 +335,8 @@ function snippet(c: Client, url: string): { text: string; hint: string } {
   }
   if (c === "code") {
     return {
-      text: `claude mcp add --transport http dockhand ${url} --header "Authorization: Bearer <key>"`,
-      hint: "Run in your terminal, replacing <key> with an API key from above. Add --scope user to use it in every project.",
+      text: `claude mcp add --transport http dockhand ${url}`,
+      hint: "Run in your terminal, then /mcp in Claude Code to sign in to Dockhand (add --scope user to use it in every project). Or skip the sign-in with an API key: append --header \"Authorization: Bearer <key>\".",
     };
   }
   return {
@@ -342,13 +348,13 @@ function snippet(c: Client, url: string): { text: string; hint: string } {
 function ConnectCard() {
   const shell = useShell();
   const { data: mcp } = useApi<McpStatus>("/api/mcp", { refresh: 30000 });
-  const [client, setClient] = useState<Client>("desktop");
+  const [client, setClient] = useState<Client>("claude");
   const url = mcp?.url || (typeof window !== "undefined" ? `${window.location.origin}/mcp` : "/mcp");
   const s = snippet(client, url);
   return (
     <div className="glass-card" style={cardStyle(12)}>
       <InkHead title="Connect a client" wrap>
-        <InkSeg<Client> options={[{ value: "desktop", label: "Claude Desktop" }, { value: "code", label: "Claude Code" }, { value: "cursor", label: "Cursor" }]} value={client} onChange={setClient} />
+        <InkSeg<Client> options={[{ value: "claude", label: "Claude & Cowork" }, { value: "code", label: "Claude Code" }, { value: "desktop", label: "Desktop config" }, { value: "cursor", label: "Cursor" }]} value={client} onChange={setClient} />
       </InkHead>
       <div style={{ position: "relative" }}>
         <code className="term-block" style={{ display: "block", paddingRight: 70 }}>{s.text}</code>

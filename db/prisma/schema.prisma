@@ -314,6 +314,17 @@ model ApiKey {
   @@map("api_keys")
 }
 
+// MCP clients registered through OAuth dynamic client registration (Claude chat, Cowork, …).
+model OAuthClient {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String
+  redirectUris Json     @default("[]") @map("redirect_uris")
+  secretHash   String   @default("") @map("secret_hash") // sha256 of the client secret; "" = public client
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("oauth_clients")
+}
+
 model McpActivity {
   id       BigInt   @id @default(autoincrement())
   apiKeyId String?  @map("api_key_id") @db.Uuid

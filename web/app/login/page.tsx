@@ -8,6 +8,13 @@ import { Toggle, copyText } from "@/components/ui";
 import { errMsg, invalidate, post, useApi } from "@/lib/api";
 import type { AuthState, User } from "@/lib/types";
 
+/** Where to go after signing in: a same-origin path from ?next=, else home. */
+function nextPath() {
+  if (typeof window === "undefined") return "/";
+  const n = new URLSearchParams(window.location.search).get("next") ?? "";
+  return n.startsWith("/") && !n.startsWith("//") ? n : "/";
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const { data: state } = useApi<AuthState>("/api/auth/state", { revalidateOnFocus: false });
@@ -23,7 +30,7 @@ export default function LoginPage() {
   useEffect(() => {
     if (!state) return;
     if (state.setupRequired) router.replace("/setup");
-    else if (state.user) router.replace("/");
+    else if (state.user) router.replace(nextPath());
   }, [state, router]);
 
   const submit = async (e: React.FormEvent) => {
@@ -34,7 +41,7 @@ export default function LoginPage() {
     try {
       await post<User>("/api/auth/login", { username: username.trim(), password, remember });
       await invalidate("/api/auth/state");
-      router.replace("/");
+      router.replace(nextPath());
     } catch (e2) {
       setErr(errMsg(e2) || "Sign-in failed.");
       setBusy(false);

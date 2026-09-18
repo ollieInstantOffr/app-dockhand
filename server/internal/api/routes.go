@@ -133,6 +133,8 @@ func (s *Server) registerAPI(r chi.Router) {
 	r.Post("/mcp/keys", s.createMcpKey)
 	r.Delete("/mcp/keys/{id}", s.revokeMcpKey)
 	r.Get("/mcp/activity", s.mcpActivity)
+	r.Get("/oauth/request", s.oauthRequest)
+	r.Post("/oauth/approve", s.oauthApprove)
 	r.Get("/system", s.systemInfo)
 	r.Post("/system/check", s.systemCheck)
 	r.Post("/system/update", s.systemUpdate)

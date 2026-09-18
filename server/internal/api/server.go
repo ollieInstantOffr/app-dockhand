@@ -101,6 +101,7 @@ func (s *Server) routes() http.Handler {
 	mcpHandler := mcp.NewHandler(s.MCP, "dockhand", s.Cfg.Version)
 	r.Handle("/mcp", mcpHandler)
 	r.Handle("/mcp/*", mcpHandler)
+	s.registerOAuth(r)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Use(s.csrf, s.authenticate, noStore)

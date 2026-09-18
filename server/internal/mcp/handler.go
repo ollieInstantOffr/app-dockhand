@@ -63,6 +63,13 @@ type Provider interface {
 	Enabled() bool
 }
 
+// ResourceMetadata is implemented by providers that publish OAuth protected
+// resource metadata (RFC 9728); its URL is advertised on 401 responses so
+// clients can discover how to obtain a token.
+type ResourceMetadata interface {
+	ResourceMetadataURL(r *http.Request) string
+}
+
 const instructions = "Dockhand is a self-hosted manager for Docker hosts. Use these tools to inspect and operate " +
 	"the hosts registered in Dockhand: list hosts and their resource usage, list/inspect/start/stop/restart/update " +
 	"containers, read and search container logs, manage Docker Compose stacks (view and edit compose files, up/down/" +
@@ -123,7 +130,11 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	keyID, keyName, ok := h.p.Authenticate(r)
 	if !ok {
-		w.Header().Set("WWW-Authenticate", `Bearer realm="dockhand"`)
+		challenge := `Bearer realm="dockhand"`
+		if rm, ok := h.p.(ResourceMetadata); ok {
+			challenge += `, resource_metadata="` + rm.ResourceMetadataURL(r) + `"`
+		}
+		w.Header().Set("WWW-Authenticate", challenge)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized: a valid Dockhand API key is required (Authorization: Bearer dh_…)"})
 		return
 	}
