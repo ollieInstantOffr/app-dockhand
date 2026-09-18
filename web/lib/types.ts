@@ -592,6 +592,16 @@ export type SettingsPatch = { [K in keyof Settings]?: Partial<Settings[K]> };
 
 // ─── System / self-update ──────────────────────────────────────────────────
 
+/** GET /api/system/updater — the newest self-update helper container. */
+export interface UpdaterStatus {
+  state: "none" | "running" | "succeeded" | "failed";
+  id?: string;
+  exitCode?: number;
+  startedAt?: ISODate;
+  finishedAt?: ISODate;
+  log: string[];
+}
+
 export interface SystemInfo {
   version: string;
   latest: string; // "" if unknown

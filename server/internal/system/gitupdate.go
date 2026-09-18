@@ -12,6 +12,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/pkg/stdcopy"
 
 	"dockhand/internal/dockerops"
 	"dockhand/internal/jobs"
@@ -172,17 +173,37 @@ func (s *Service) startGit(ctx context.Context, actor string) (string, error) {
 				files += " -f " + shellQuote(f)
 			}
 			compose := "docker compose -p " + shellQuote(dep.Project) + " --project-directory " + dir + files
+			// Fetch over HTTPS from the GitHub repo (works regardless of the checkout's SSH/credential
+			// setup) and run git as the checkout's owner so no root-owned files end up in .git.
+			fetchURL := "origin"
+			if o, r := local.Owner, local.Repo; o != "" {
+				fetchURL = "https://github.com/" + o + "/" + r + ".git"
+				if tok := os.Getenv("GITHUB_TOKEN"); tok != "" {
+					fetchURL = "https://x-access-token:" + tok + "@github.com/" + o + "/" + r + ".git"
+				}
+			}
+			branch := local.Branch
+			if branch == "" || branch == "HEAD" {
+				branch = "main"
+			}
+			git := `su-exec "$OWNER" env HOME=/tmp git -c safe.directory='*'`
 			script := strings.Join([]string{
 				"set -e",
 				"sleep 3",
-				"apk add --no-cache git >/dev/null",
-				"git config --global --add safe.directory '*'",
+				`echo "==> preparing"`,
+				"apk add --no-cache git su-exec >/dev/null",
 				"cd " + dir,
-				"git pull --ff-only",
+				`OWNER=$(stat -c %u:%g .)`,
+				`echo "==> fetching ` + branch + `"`,
+				git + " fetch " + shellQuote(fetchURL) + " " + shellQuote(branch),
+				git + " merge --ff-only FETCH_HEAD",
+				`echo "==> now at $(` + git + ` rev-parse --short HEAD)"`,
+				`echo "==> rebuilding"`,
 				compose + " up -d --build --remove-orphans",
+				`echo "==> done"`,
 			}, " && ")
-			j.Step("Handing off to updater", "git pull --ff-only && docker compose up -d --build")
-			j.Log("cmd", "$ cd "+dep.Dir+" && git pull --ff-only")
+			j.Step("Handing off to updater", "git fetch + merge --ff-only, then docker compose up -d --build")
+			j.Log("cmd", "$ cd "+dep.Dir+" && git fetch "+strings.Replace(fetchURL, os.Getenv("GITHUB_TOKEN"), "***", 1)+" "+branch+" && git merge --ff-only FETCH_HEAD")
 			j.Log("cmd", "$ "+compose+" up -d --build --remove-orphans")
 			var hid string
 			err = s.db.QueryRow(ctx, `INSERT INTO update_history (version, from_version, status, note) VALUES ($1, $2, 'pending', $3) RETURNING id::text`,
@@ -234,4 +255,64 @@ func (s *Service) reconcileGitUpdate(id, target string) {
 	}
 	_, _ = s.db.Exec(ctx, `UPDATE update_history SET status = 'failed', note = $2 WHERE id::text = $1`, id,
 		fmt.Sprintf("Restarted on %s instead of %s — check the updater container's logs", short(local.SHA), short(target)))
+}
+
+// UpdaterStatus reports on the most recent self-update helper container.
+func (s *Service) UpdaterStatus(ctx context.Context) (model.UpdaterStatus, error) {
+	st := model.UpdaterStatus{State: "none", Log: []string{}}
+	cli, err := dockerLocal()
+	if err != nil {
+		return st, nil
+	}
+	defer cli.Close()
+	list, err := cli.ContainerList(ctx, container.ListOptions{All: true, Filters: filters.NewArgs(filters.Arg("label", "dockhand.helper=self-update"))})
+	if err != nil || len(list) == 0 {
+		return st, nil
+	}
+	newest := list[0]
+	for _, c := range list[1:] {
+		if c.Created > newest.Created {
+			newest = c
+		}
+	}
+	info, err := cli.ContainerInspect(ctx, newest.ID)
+	if err != nil {
+		return st, nil
+	}
+	st.ID = newest.ID[:12]
+	if t, err := time.Parse(time.RFC3339Nano, info.State.StartedAt); err == nil && !t.IsZero() {
+		st.StartedAt = &t
+	}
+	switch {
+	case info.State.Running:
+		st.State = "running"
+	case info.State.ExitCode == 0:
+		st.State = "succeeded"
+	default:
+		st.State = "failed"
+	}
+	if !info.State.Running {
+		code := info.State.ExitCode
+		st.ExitCode = &code
+		if t, err := time.Parse(time.RFC3339Nano, info.State.FinishedAt); err == nil && !t.IsZero() {
+			st.FinishedAt = &t
+		}
+	}
+	if rd, err := cli.ContainerLogs(ctx, newest.ID, container.LogsOptions{ShowStdout: true, ShowStderr: true, Tail: "60"}); err == nil {
+		var buf strings.Builder
+		_, _ = stdcopy.StdCopy(&buf, &buf, rd)
+		rd.Close()
+		tok := os.Getenv("GITHUB_TOKEN")
+		for _, l := range strings.Split(buf.String(), "\n") {
+			l = strings.TrimRight(l, "\r ")
+			if l == "" {
+				continue
+			}
+			if tok != "" {
+				l = strings.ReplaceAll(l, tok, "***")
+			}
+			st.Log = append(st.Log, l)
+		}
+	}
+	return st, nil
 }

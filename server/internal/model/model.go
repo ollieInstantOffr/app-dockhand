@@ -621,6 +621,16 @@ type UpdateHistory struct {
 	At          time.Time `json:"at"`
 }
 
+// UpdaterStatus describes the newest self-update helper container.
+type UpdaterStatus struct {
+	State      string     `json:"state"` // none | running | succeeded | failed
+	ID         string     `json:"id,omitempty"`
+	ExitCode   *int       `json:"exitCode,omitempty"`
+	StartedAt  *time.Time `json:"startedAt,omitempty"`
+	FinishedAt *time.Time `json:"finishedAt,omitempty"`
+	Log        []string   `json:"log"` // last lines of its output
+}
+
 type SystemInfo struct {
 	Version         string          `json:"version"`
 	Latest          string          `json:"latest"`

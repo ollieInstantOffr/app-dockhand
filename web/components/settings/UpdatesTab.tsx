@@ -6,7 +6,7 @@ import { Dropdown, LogBlock, ProgressList, Seg } from "@/components/ui";
 import { useShell } from "@/components/shell/context";
 import { errMsg, invalidate, post, useApi, useJob } from "@/lib/api";
 import { C, ago, shortSha } from "@/lib/format";
-import type { JobRef, Settings, SystemInfo } from "@/lib/types";
+import type { JobRef, Settings, SystemInfo, UpdaterStatus } from "@/lib/types";
 import { InkButton, InkHead, PILL, SetToggle, StatusPill, cardStyle, colStack, rowStyle, twoCol, useSettings } from "./common";
 
 const WINDOWS = ["Sun 03:00–05:00", "Daily 04:00–05:00", "Sat 02:00–04:00", "Any time"];
@@ -171,7 +171,8 @@ function VersionCard({ sys, job, jobKind, checking, onCheck, onUpdate, onDismiss
         <>
           <ProgressList steps={job.steps} />
           <LogBlock lines={job.log} running={running} style={{ maxHeight: 220 }} />
-          {job.status === "success" && (
+          {job.status === "success" && job.result?.handedOff === true && sys?.mode === "git" && <UpdaterWatch target={target} onDismiss={onDismiss} />}
+          {job.status === "success" && !(job.result?.handedOff === true && sys?.mode === "git") && (
             <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 14, background: "rgba(34,160,107,.1)", border: "1px solid rgba(34,160,107,.3)", animation: "rise .3s ease both" }}>
               <span style={{ width: 28, height: 28, borderRadius: "50%", background: C.ok, color: "#fff", display: "grid", placeItems: "center", flex: "none" }}>
                 <Icon name="check" size={15} strokeWidth={2.6} />
@@ -193,6 +194,96 @@ function VersionCard({ sys, job, jobKind, checking, onCheck, onUpdate, onDismiss
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * Follows the detached updater after the API hands off: shows its output, reports
+ * failures, and reloads once the API is back on the new commit.
+ */
+function UpdaterWatch({ target, onDismiss }: { target: string; onDismiss: () => void }) {
+  const [st, setSt] = useState<UpdaterStatus | null>(null);
+  const [down, setDown] = useState(false);
+  const [live, setLive] = useState<string>("");
+  const [started] = useState(() => Date.now());
+  const [now, setNow] = useState(Date.now());
+  const done = !!live && target && live.startsWith(target.slice(0, 7));
+  const failed = st?.state === "failed";
+  const slow = !done && !failed && now - started > 6 * 60_000;
+
+  useEffect(() => {
+    if (done || failed) return;
+    let alive = true;
+    const tick = async () => {
+      setNow(Date.now());
+      try {
+        const r = await fetch("/api/system/updater", { credentials: "same-origin", cache: "no-store" });
+        if (!r.ok) throw new Error(String(r.status));
+        const s = (await r.json()) as UpdaterStatus;
+        if (!alive) return;
+        setSt(s);
+        setDown(false);
+        const i = await fetch("/api/system", { credentials: "same-origin", cache: "no-store" });
+        if (i.ok) {
+          const info = (await i.json()) as SystemInfo;
+          if (alive && info.currentCommit) setLive(info.currentCommit);
+        }
+      } catch {
+        if (alive) setDown(true); // the API is restarting
+      }
+    };
+    tick();
+    const t = setInterval(tick, 2500);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [done, failed]);
+
+  useEffect(() => {
+    if (!done) return;
+    const t = setTimeout(() => window.location.reload(), 2500);
+    return () => clearTimeout(t);
+  }, [done]);
+
+  const phase = done
+    ? `Updated to ${target.slice(0, 7)} — reloading…`
+    : failed
+      ? `The update failed (exit ${st?.exitCode ?? "?"}) — Dockhand is still running the previous version.`
+      : down
+        ? "Dockhand is restarting on the new version…"
+        : st?.state === "succeeded"
+          ? "Rebuild finished — waiting for Dockhand to come back…"
+          : "Pulling and rebuilding Dockhand — this takes a minute or two…";
+  const tone = done ? { bg: "rgba(34,160,107,.1)", bd: "rgba(34,160,107,.3)", ink: "var(--ok-ink)" } : failed || slow ? { bg: "var(--crit-bg)", bd: "rgba(226,80,76,.3)", ink: "var(--crit-ink)" } : { bg: "rgba(47,111,237,.07)", bd: "rgba(47,111,237,.28)", ink: "var(--ink)" };
+  const lines = (st?.log ?? []).map((text) => ({ text, level: (/error|fatal|failed|denied/i.test(text) ? "error" : text.startsWith("==>") ? "ok" : "info") as "error" | "ok" | "info" }));
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 14, background: tone.bg, border: `1px solid ${tone.bd}`, animation: "rise .3s ease both" }}>
+        {done ? (
+          <span style={{ width: 28, height: 28, borderRadius: "50%", background: C.ok, color: "#fff", display: "grid", placeItems: "center", flex: "none" }}>
+            <Icon name="check" size={15} strokeWidth={2.6} />
+          </span>
+        ) : failed ? (
+          <span style={{ width: 28, height: 28, borderRadius: "50%", background: C.crit, color: "#fff", display: "grid", placeItems: "center", flex: "none" }}>
+            <Icon name="x" size={14} strokeWidth={2.6} />
+          </span>
+        ) : (
+          <span className="spinner" style={{ width: 18, height: 18, color: C.blue, flex: "none", margin: 5 }} />
+        )}
+        <span style={{ fontSize: 13.5, fontWeight: 700, color: tone.ink, flex: 1 }}>
+          {slow ? "This is taking longer than expected — check the updater output below." : phase}
+        </span>
+        {done && <button type="button" className="btn" style={{ height: 34, padding: "0 14px", fontSize: 12.5 }} onClick={() => window.location.reload()}>Reload</button>}
+        {(failed || slow) && <button type="button" className="btn2" onClick={onDismiss}>Dismiss</button>}
+      </div>
+      {lines.length > 0 && <LogBlock lines={lines} running={!done && !failed} style={{ maxHeight: 220 }} />}
+      {st?.id && (failed || slow) && (
+        <span style={{ fontSize: 12, color: "var(--ink-3)" }}>
+          Full output on the host: <code className="mono">docker logs {st.id}</code>
+        </span>
+      )}
+    </>
   );
 }
 

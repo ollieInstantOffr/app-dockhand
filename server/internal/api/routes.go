@@ -136,5 +136,6 @@ func (s *Server) registerAPI(r chi.Router) {
 	r.Get("/system", s.systemInfo)
 	r.Post("/system/check", s.systemCheck)
 	r.Post("/system/update", s.systemUpdate)
+	r.Get("/system/updater", s.systemUpdater)
 	r.Post("/system/rollback", s.systemRollback)
 }

@@ -506,6 +506,15 @@ func (s *Server) systemCheck(w http.ResponseWriter, r *http.Request) {
 	ok(w, info)
 }
 
+func (s *Server) systemUpdater(w http.ResponseWriter, r *http.Request) {
+	st, err := s.System.UpdaterStatus(r.Context())
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	ok(w, st)
+}
+
 func (s *Server) systemUpdate(w http.ResponseWriter, r *http.Request) {
 	id, err := s.System.Update(r.Context(), actor(r))
 	jobRef(w, id, err)
