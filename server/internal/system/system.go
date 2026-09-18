@@ -42,6 +42,14 @@ type Service struct {
 	cacheAt time.Time
 	cacheCh string
 	cacheRp string
+
+	// git mode (see gitsource.go)
+	gitAt     time.Time
+	gitDep    *deployment
+	gitLocal  *checkout
+	gitRemote *remoteHead
+	gitErr    string
+	bootSHA   string // checkout HEAD when this API process started = the commit it was built from
 }
 
 type release struct {
@@ -56,6 +64,12 @@ func New(cfg *config.Config, pool *db.DB, st *settings.Store, jr *jobs.Runner) *
 
 // RecordBoot reconciles update history with the running version.
 func (s *Service) RecordBoot(ctx context.Context) {
+	// Remember which commit this build came from (read in the background; needs a helper container).
+	go func() {
+		c, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		s.refreshGit(c)
+	}()
 	var id, version, status string
 	err := s.db.QueryRow(ctx, `SELECT id::text, version, status FROM update_history ORDER BY at DESC LIMIT 1`).Scan(&id, &version, &status)
 	cur := s.cfg.Version
@@ -64,6 +78,8 @@ func (s *Service) RecordBoot(ctx context.Context) {
 		_, _ = s.db.Exec(ctx, `INSERT INTO update_history (version, status, note) VALUES ($1, 'success', 'Installed')`, cur)
 	case err != nil:
 		slog.Warn("update history", "err", err)
+	case status == "pending" && shaRe.MatchString(version):
+		go s.reconcileGitUpdate(id, version)
 	case status == "pending":
 		if strings.TrimPrefix(version, "v") == strings.TrimPrefix(cur, "v") || version == "latest" {
 			_, _ = s.db.Exec(ctx, `UPDATE update_history SET status = 'success', version = $2, note = 'Update completed' WHERE id::text = $1`, id, cur)
@@ -85,6 +101,20 @@ func (s *Service) Info(ctx context.Context, force bool) (model.SystemInfo, error
 	info := model.SystemInfo{Version: s.cfg.Version, Notes: []string{}, CanSelfUpdate: CanSelfUpdate(),
 		Source:  model.SystemSource{Repo: up.Repo, Branch: channelBranch(up.Channel), SHA: os.Getenv("DOCKHAND_COMMIT"), Path: up.ComposeFile},
 		History: []model.UpdateHistory{}}
+	if gi, ok := s.gitInfo(ctx, force); ok {
+		info.Latest = gi.latest
+		info.UpdateAvailable = gi.available
+		info.ReleasedAt = gi.date
+		info.Notes = gi.notes
+		info.ChangelogURL = gi.url
+		info.Source = gi.source
+		info.CurrentCommit = gi.current
+		info.Mode = "git"
+		info.CheckError = gi.err
+		at := gi.at
+		info.CheckedAt = &at
+		return s.withHistory(ctx, info)
+	}
 	rel, at := s.latest(ctx, up.Repo, up.Channel, force)
 	if rel != nil {
 		info.Latest = strings.TrimPrefix(rel.tag, "v")
@@ -96,6 +126,11 @@ func (s *Service) Info(ctx context.Context, force bool) (model.SystemInfo, error
 	if !at.IsZero() {
 		info.CheckedAt = &at
 	}
+	info.Mode = "release"
+	return s.withHistory(ctx, info)
+}
+
+func (s *Service) withHistory(ctx context.Context, info model.SystemInfo) (model.SystemInfo, error) {
 	rows, err := s.db.Query(ctx, `SELECT id::text, version, from_version, status, note, at FROM update_history ORDER BY at DESC LIMIT 20`)
 	if err != nil {
 		return info, err
@@ -211,6 +246,9 @@ func splitVersion(v string) ([3]int, string) {
 // Update starts a self-update job to the latest release.
 func (s *Service) Update(ctx context.Context, actor string) (string, error) {
 	info, _ := s.Info(ctx, false)
+	if info.Mode == "git" {
+		return s.startGit(ctx, actor)
+	}
 	tag := "latest"
 	if info.Latest != "" {
 		tag = info.Latest

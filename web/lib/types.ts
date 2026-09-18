@@ -603,6 +603,10 @@ export interface SystemInfo {
   canSelfUpdate: boolean; // docker socket available
   source: { repo: string; branch: string; sha: string; path: string };
   history: { id: ID; version: string; fromVersion: string; status: string; note: string; at: ISODate }[];
+  /** "git": updates are new commits on the checkout's branch; "release": GitHub releases. */
+  mode?: "git" | "release";
+  currentCommit?: string; // short sha the running stack was built from (git mode)
+  checkError?: string; // why the last update check failed
 }
 
 // ─── Overview (fleet page + palette) ───────────────────────────────────────

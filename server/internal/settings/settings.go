@@ -101,7 +101,7 @@ func Defaults(publicURL string, tools []ToolInfo) Settings {
 		GitHub:  GitHub{AutoDeploy: true, OnlyCompose: true},
 		MCP:     MCP{Transport: "http", Tools: tp},
 		Updates: Updates{Channel: "stable", Window: "Sun 03:00–05:00", Backup: true, Build: "pull",
-			Repo: "dockhand-app/dockhand", ComposeFile: "/opt/dockhand/docker-compose.yml"},
+			Repo: "ollieInstantOffr/app-dockhand", ComposeFile: "/opt/dockhand/docker-compose.yml"},
 		Notifications: Notifications{HostDown: true, ContainerCrash: true, Unhealthy: true, Updates: true,
 			DiskSpace: true, Deploys: true},
 	}
@@ -288,6 +288,10 @@ func normalize(s *Settings, d Settings) {
 	}
 	if s.General.PublicURL == "" {
 		s.General.PublicURL = d.General.PublicURL
+	}
+	// Early builds shipped a placeholder update repo.
+	if s.Updates.Repo == "" || s.Updates.Repo == "dockhand-app/dockhand" {
+		s.Updates.Repo = d.Updates.Repo
 	}
 }
 

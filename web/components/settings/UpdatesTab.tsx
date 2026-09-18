@@ -10,7 +10,8 @@ import type { JobRef, Settings, SystemInfo } from "@/lib/types";
 import { InkButton, InkHead, PILL, SetToggle, StatusPill, cardStyle, colStack, rowStyle, twoCol, useSettings } from "./common";
 
 const WINDOWS = ["Sun 03:00–05:00", "Daily 04:00–05:00", "Sat 02:00–04:00", "Any time"];
-const v = (s: string) => (s ? `v${s.replace(/^v/, "")}` : "");
+// Versions read "v1.4.0"; commits (git-mode updates) read as a short sha.
+const v = (s: string) => (!s ? "" : /^[0-9a-f]{7,40}$/.test(s) ? s.slice(0, 7) : `v${s.replace(/^v/, "")}`);
 
 export function UpdatesTab() {
   const shell = useShell();
@@ -94,7 +95,7 @@ function VersionCard({ sys, job, jobKind, checking, onCheck, onUpdate, onDismiss
         </span>
         <div style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1, minWidth: 0 }}>
           <span style={{ fontSize: 17, fontWeight: 700 }}>
-            Dockhand <span className="mono" style={{ fontWeight: 500, color: "var(--ink-3)" }}>{sys ? v(sys.version) : ""}</span>
+            Dockhand <span className="mono" style={{ fontWeight: 500, color: "var(--ink-3)" }}>{sys ? v(sys.version) : ""}{sys?.currentCommit ? ` · ${sys.currentCommit}` : ""}</span>
           </span>
           <span style={{ fontSize: 12.5, color: "var(--ink-2)" }}>{status}</span>
         </div>
@@ -112,7 +113,8 @@ function VersionCard({ sys, job, jobKind, checking, onCheck, onUpdate, onDismiss
               </span>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1, minWidth: 0 }}>
                 <span style={{ fontSize: 14, fontWeight: 700 }}>
-                  {v(sys.latest)} is available{sys.releasedAt && <span style={{ fontWeight: 500, color: "var(--ink-3)" }}> · released {ago(sys.releasedAt)}</span>}
+                  {sys.mode === "git" ? `${sys.notes.length || "New"} new commit${sys.notes.length === 1 ? "" : "s"} on ${sys.source.branch}` : `${v(sys.latest)} is available`}
+                  {sys.releasedAt && <span style={{ fontWeight: 500, color: "var(--ink-3)" }}> · {sys.mode === "git" ? "pushed" : "released"} {ago(sys.releasedAt)}</span>}
                 </span>
                 {!!sys.notes.length && (
                   <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12.5, color: "var(--ink-2)", lineHeight: 1.6 }}>
@@ -120,7 +122,7 @@ function VersionCard({ sys, job, jobKind, checking, onCheck, onUpdate, onDismiss
                   </ul>
                 )}
                 {(sys.changelogUrl || sys.source.repo) && (
-                  <a href={sys.changelogUrl || `https://github.com/${sys.source.repo}/releases`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontWeight: 600, alignSelf: "flex-start" }}>Full changelog on GitHub →</a>
+                  <a href={sys.changelogUrl || `https://github.com/${sys.source.repo}/releases`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontWeight: 600, alignSelf: "flex-start" }}>{sys.mode === "git" ? "Compare on GitHub →" : "Full changelog on GitHub →"}</a>
                 )}
               </div>
             </div>
@@ -131,9 +133,15 @@ function VersionCard({ sys, job, jobKind, checking, onCheck, onUpdate, onDismiss
               </span>
               <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                 <span style={{ fontSize: 14, fontWeight: 700 }}>You&apos;re on the latest version</span>
-                <span style={{ fontSize: 12.5, color: "var(--ink-3)" }}>{sys.latest ? `${v(sys.latest)} is the newest release on this channel.` : "Couldn't reach the release feed — try Check now."}</span>
+                <span style={{ fontSize: 12.5, color: "var(--ink-3)" }}>{sys.checkError
+                    ? sys.checkError
+                    : sys.mode === "git"
+                      ? `Running ${sys.currentCommit}, the latest commit on ${sys.source.branch} of ${sys.source.repo}.`
+                      : sys.latest
+                        ? `${v(sys.latest)} is the newest release on this channel.`
+                        : "Couldn't reach the release feed — try Check now."}</span>
                 {sys.source.repo && (
-                  <a href={sys.changelogUrl || `https://github.com/${sys.source.repo}/releases`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontWeight: 600, marginTop: 2 }}>Release notes on GitHub →</a>
+                  <a href={sys.mode === "git" ? `https://github.com/${sys.source.repo}/commits/${sys.source.branch}` : sys.changelogUrl || `https://github.com/${sys.source.repo}/releases`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontWeight: 600, marginTop: 2 }}>Release notes on GitHub →</a>
                 )}
               </span>
             </div>
@@ -218,7 +226,8 @@ function SourceCard({ sys }: { sys?: SystemInfo }) {
   const [compose, setCompose] = useState<string | null>(null);
   const composeVal = compose ?? u?.composeFile ?? "";
   const src = sys?.source;
-  const repo = u?.repo || src?.repo || "";
+  const git = sys?.mode === "git";
+  const repo = (git ? src?.repo : u?.repo) || src?.repo || "";
   const branch = src?.branch || "main";
   return (
     <div className="glass-card" style={cardStyle(14)}>
@@ -234,10 +243,17 @@ function SourceCard({ sys }: { sys?: SystemInfo }) {
             <span className="skel" style={{ width: "50%", height: 13 }} />
           )}
           <span className="mono ellipsis" style={{ fontSize: 11, color: "var(--ink-3)" }}>
-            {src ? `${branch} @ ${shortSha(src.sha) || "unknown"}${src.path ? ` · cloned to ${src.path}` : ""}` : "…"}
+            {src ? `${branch} @ ${shortSha(src.sha) || "unknown"}${src.path ? ` · ${git ? "checkout" : "cloned to"} ${src.path}` : ""}` : "…"}
           </span>
         </span>
       </div>
+      {git ? (
+        <div className="field-hint" style={{ lineHeight: 1.55 }}>
+          Dockhand runs from this git checkout. Updates compare it with the newest commit on <span className="mono">{branch}</span> at GitHub; updating runs{" "}
+          <span className="mono">git pull --ff-only</span> and <span className="mono">docker compose up -d --build</span> in <span className="mono">{src?.path}</span>.
+        </div>
+      ) : (
+      <>
       <label className="field">
         Compose file
         <input
@@ -258,6 +274,8 @@ function SourceCard({ sys }: { sys?: SystemInfo }) {
         <Seg<Settings["updates"]["build"]> fit options={[{ value: "pull", label: "Pull image" }, { value: "build", label: "Build from source" }]} value={u?.build ?? "pull"} onChange={(x) => save({ updates: { build: x } })} />
         <span className="field-hint">Build compiles the image locally from source; pull uses the published image for this tag.</span>
       </div>
+      </>
+      )}
       <SetToggle label={`Redeploy on push to ${branch}`} sub="For running your own fork" on={!!u?.redeployOnPush} disabled={!u} onChange={(x) => save({ updates: { redeployOnPush: x } })} />
     </div>
   );

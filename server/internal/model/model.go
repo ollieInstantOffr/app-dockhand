@@ -632,6 +632,11 @@ type SystemInfo struct {
 	CanSelfUpdate   bool            `json:"canSelfUpdate"`
 	Source          SystemSource    `json:"source"`
 	History         []UpdateHistory `json:"history"`
+	// Mode is "git" when Dockhand runs from a git checkout (updates = new commits on
+	// its branch) and "release" otherwise (updates = GitHub releases).
+	Mode          string `json:"mode"`
+	CurrentCommit string `json:"currentCommit,omitempty"` // short sha the stack was built from (git mode)
+	CheckError    string `json:"checkError,omitempty"`    // why the last check failed, if it did
 }
 
 // ─── Overview ──────────────────────────────────────────────────────────────
