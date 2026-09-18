@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "@xterm/xterm/css/xterm.css";
 import "./globals.css";
+import { PwaRegister } from "@/components/PwaRegister";
 
 export const metadata: Metadata = {
   title: "Dockhand",
@@ -13,7 +14,9 @@ export const metadata: Metadata = {
     ],
     apple: [{ url: "/icons/icon-180.png", sizes: "180x180" }],
   },
-  appleWebApp: { capable: true, title: "Dockhand", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "Dockhand", statusBarStyle: "black-translucent" },
+  applicationName: "Dockhand",
+  other: { "mobile-web-app-capable": "yes" },
 };
 
 export const viewport: Viewport = {
@@ -38,7 +41,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* eslint-disable-next-line @next/next/no-page-custom-font */}
         <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <PwaRegister />
+      </body>
     </html>
   );
 }

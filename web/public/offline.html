@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dockhand — offline</title>
+<link rel="icon" href="/icons/icon.svg">
+<style>
+  :root { color-scheme: light dark; --bg:#eef0f5; --ink:#171a21; --ink2:#5f6675; --card:#fff; --btn:#171a21; --btnInk:#fff }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0d1016; --ink:#e9ecf3; --ink2:#aab2c2; --card:#1a1f2a; --btn:#eef0f5; --btnInk:#171a21 } }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--ink); font-family:Manrope,system-ui,sans-serif }
+  main { min-height:100%; display:grid; place-items:center; padding:24px; box-sizing:border-box }
+  .card { width:min(400px,100%); background:var(--card); border-radius:26px; padding:32px 28px; text-align:center;
+          box-shadow:0 1px 2px rgba(20,24,40,.05),0 14px 44px rgba(20,24,40,.08) }
+  img { width:58px; height:58px; border-radius:18px }
+  h1 { font-size:21px; margin:16px 0 6px; letter-spacing:-.02em }
+  p { font-size:13.5px; line-height:1.55; color:var(--ink2); margin:0 0 20px }
+  button { height:42px; padding:0 20px; border:0; border-radius:12px; background:var(--btn); color:var(--btnInk);
+           font:700 13.5px Manrope,system-ui,sans-serif; cursor:pointer }
+</style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <img src="/icons/icon-192.png" alt="">
+    <h1>Can't reach Dockhand</h1>
+    <p>The Dockhand server isn't answering. It may be restarting after an update — this page retries automatically.</p>
+    <button onclick="location.reload()">Try again</button>
+  </div>
+</main>
+<script>setInterval(() => fetch("/api/auth/state", { cache: "no-store" }).then((r) => r.ok && location.reload()).catch(() => {}), 5000);</script>
+</body>
+</html>
