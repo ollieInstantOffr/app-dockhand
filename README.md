@@ -23,6 +23,14 @@ Forgot the password?
 docker compose exec api dockhand reset-password <username>
 ```
 
+## Updating
+
+Deploy Dockhand from a git checkout of this repository (`git clone … && docker compose up -d --build`).
+Settings → Updates compares the commit the running stack was built from with the newest commit on the same
+branch on GitHub; **Update** runs `git pull --ff-only` and `docker compose up -d --build` in a helper container,
+so pushing to `main` is all it takes to ship a new version. Follow a running update with
+`docker logs -f $(docker ps -lq --filter label=dockhand.helper=self-update)`.
+
 ## Architecture
 
 ```
