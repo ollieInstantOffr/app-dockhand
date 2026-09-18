@@ -43,13 +43,13 @@ services:
         DOCKHAND_VERSION: ${DOCKHAND_VERSION:-1.0.0}
     restart: unless-stopped
     ports:
-      - "${DOCKHAND_PORT:-3000}:8080"
+      - "${DOCKHAND_PORT:-5773}:8080"
       # Dedicated MCP endpoint (Settings → MCP → Port). Same number inside and out.
       - "${DOCKHAND_MCP_PORT:-8787}:${DOCKHAND_MCP_PORT:-8787}"
     environment:
       DATABASE_URL: *db-url
       DOCKHAND_SECRET: ${DOCKHAND_SECRET:?set DOCKHAND_SECRET in .env}
-      DOCKHAND_PUBLIC_URL: ${DOCKHAND_PUBLIC_URL:-http://localhost:3000}
+      DOCKHAND_PUBLIC_URL: ${DOCKHAND_PUBLIC_URL:-http://localhost:5773}
       DOCKHAND_WEB_URL: http://web:3000
       DOCKHAND_AUTO_LOCAL: ${DOCKHAND_AUTO_LOCAL:-true}
       DOCKHAND_MCP_PORT: ${DOCKHAND_MCP_PORT:-8787}

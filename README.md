@@ -11,7 +11,7 @@ cp .env.example .env        # set DOCKHAND_SECRET (openssl rand -hex 32) and POS
 docker compose up -d --build
 ```
 
-Open <http://localhost:3000> and create the admin account. With `DOCKHAND_AUTO_LOCAL=true` the machine Dockhand
+Open <http://localhost:5773> and create the admin account. With `DOCKHAND_AUTO_LOCAL=true` the machine Dockhand
 runs on is added as a host automatically (through the mounted Docker socket).
 
 Stacks and backups for the local host live in `/opt/dockhand` (mounted at the same path in the API
@@ -26,7 +26,7 @@ docker compose exec api dockhand reset-password <username>
 ## Architecture
 
 ```
-browser ──► api (Go, :8080 → host :3000)
+browser ──► api (Go, :8080 → host :5773)
               ├─ /api/*, WebSockets, /mcp, /api/webhooks/github
               ├─ everything else ──► web (Next.js 16, standalone)
               ├─ Postgres 17 (schema + migrations owned by Prisma, applied by the `migrate` job)
