@@ -107,3 +107,14 @@ func TestBuildRunSpecAndCommand(t *testing.T) {
 		t.Error("bad name accepted")
 	}
 }
+
+func TestShellArgv(t *testing.T) {
+	for _, c := range []string{"", "auto", "/bin/sh", "sh"} {
+		if a := ShellArgv(c); len(a) != 3 || a[0] != "/bin/sh" || a[1] != "-c" {
+			t.Fatalf("%q → %v", c, a)
+		}
+	}
+	if a := ShellArgv("/bin/bash -l"); len(a) != 2 || a[0] != "/bin/bash" {
+		t.Fatalf("explicit command → %v", a)
+	}
+}

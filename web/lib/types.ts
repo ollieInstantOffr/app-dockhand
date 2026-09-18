@@ -592,6 +592,15 @@ export type SettingsPatch = { [K in keyof Settings]?: Partial<Settings[K]> };
 
 // ─── System / self-update ──────────────────────────────────────────────────
 
+/** GET /api/system/history?page=&limit= */
+export interface UpdateHistoryPage {
+  items: SystemInfo["history"];
+  total: number;
+  page: number;
+  pages: number;
+  limit: number;
+}
+
 /** GET /api/system/updater — the newest self-update helper container. */
 export interface UpdaterStatus {
   state: "none" | "running" | "succeeded" | "failed";

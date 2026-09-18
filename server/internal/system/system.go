@@ -358,3 +358,35 @@ func (s *Service) backup(ctx context.Context, j *jobs.Job) error {
 	}
 	return nil
 }
+
+// History returns one page of update history, newest first.
+func (s *Service) History(ctx context.Context, page, limit int) (model.UpdateHistoryPage, error) {
+	if limit < 1 || limit > 100 {
+		limit = 5
+	}
+	if page < 1 {
+		page = 1
+	}
+	out := model.UpdateHistoryPage{Items: []model.UpdateHistory{}, Page: page, Limit: limit}
+	if err := s.db.QueryRow(ctx, `SELECT count(*) FROM update_history`).Scan(&out.Total); err != nil {
+		return out, err
+	}
+	out.Pages = (out.Total + limit - 1) / limit
+	if out.Pages == 0 {
+		out.Pages = 1
+	}
+	rows, err := s.db.Query(ctx, `SELECT id::text, version, from_version, status, note, at FROM update_history ORDER BY at DESC LIMIT $1 OFFSET $2`,
+		limit, (page-1)*limit)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var h model.UpdateHistory
+		if err := rows.Scan(&h.ID, &h.Version, &h.FromVersion, &h.Status, &h.Note, &h.At); err != nil {
+			return out, err
+		}
+		out.Items = append(out.Items, h)
+	}
+	return out, rows.Err()
+}

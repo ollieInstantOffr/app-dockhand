@@ -170,7 +170,7 @@ func (s *Server) containerExec(w http.ResponseWriter, r *http.Request) {
 	cols, rows := sizeParams(r)
 	cmd := r.URL.Query().Get("cmd")
 	if cmd == "" {
-		cmd = "/bin/sh"
+		cmd = "auto"
 	}
 	cid := chi.URLParam(r, "cid")
 	who := actor(r)

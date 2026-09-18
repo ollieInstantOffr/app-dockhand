@@ -36,7 +36,12 @@ export function XTerm({ path, active, fontSize = 13, onDims, onState, onReady }:
     onStateRef.current?.("connecting");
 
     (async () => {
-      const [{ Terminal }, { FitAddon }] = await Promise.all([import("@xterm/xterm"), import("@xterm/addon-fit")]);
+      const [{ Terminal }, { FitAddon }, { WebLinksAddon }, { Unicode11Addon }] = await Promise.all([
+        import("@xterm/xterm"),
+        import("@xterm/addon-fit"),
+        import("@xterm/addon-web-links"),
+        import("@xterm/addon-unicode11"),
+      ]);
       if (disposed) return;
       term = new Terminal({
         fontFamily: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -44,7 +49,12 @@ export function XTerm({ path, active, fontSize = 13, onDims, onState, onReady }:
         lineHeight: 1.3,
         cursorBlink: true,
         allowTransparency: true,
-        scrollback: 5000,
+        allowProposedApi: true, // unicode11 widths
+        scrollback: 10000,
+        macOptionIsMeta: true, // Option+B/F/D etc. work as Meta (word jumps in bash/readline)
+        macOptionClickForcesSelection: true,
+        rightClickSelectsWord: true,
+        altClickMovesCursor: true,
         theme: {
           background: "rgba(0,0,0,0)",
           foreground: "#d5d8de",
@@ -71,7 +81,15 @@ export function XTerm({ path, active, fontSize = 13, onDims, onState, onReady }:
       });
       const fit = new FitAddon();
       term.loadAddon(fit);
+      term.loadAddon(new WebLinksAddon((ev, uri) => {
+        ev.preventDefault();
+        window.open(uri, "_blank", "noopener,noreferrer");
+      }));
+      const uni = new Unicode11Addon();
+      term.loadAddon(uni);
+      term.unicode.activeVersion = "11";
       term.open(el);
+      installKeys(term);
       termRef.current = term;
       fitRef.current = fit;
       onReadyRef.current?.(term);
@@ -199,7 +217,7 @@ export function XTerm({ path, active, fontSize = 13, onDims, onState, onReady }:
 
   return (
     <div style={{ position: "relative", flex: 1, display: active ? "flex" : "none", flexDirection: "column", minHeight: 0 }}>
-      <div ref={hostRef} className="xterm-host" style={{ minHeight: 0 }} />
+      <div ref={hostRef} className="xterm-host" style={{ minHeight: 0 }} onMouseUp={() => termRef.current?.focus()} />
       {ended && (
         <div style={{ position: "absolute", right: 16, bottom: 16, display: "flex", alignItems: "center", gap: 10, padding: "8px 8px 8px 14px", borderRadius: 12, background: "rgba(36,41,54,.95)", border: "1px solid rgba(255,255,255,.1)", boxShadow: "0 12px 30px rgba(0,0,0,.35)", fontFamily: "var(--font)" }}>
           <span style={{ fontSize: 12.5, color: "#aab1bf" }}>Session ended</span>
@@ -210,4 +228,42 @@ export function XTerm({ path, active, fontSize = 13, onDims, onState, onReady }:
       )}
     </div>
   );
+}
+
+const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+
+/**
+ * Keys behave like a native terminal:
+ * - Tab / Shift+Tab always go to the shell (never move browser focus).
+ * - Copy: ⌘C with a selection (macOS) or Ctrl/⌘+Shift+C; paste: ⌘V or Ctrl/⌘+Shift+V.
+ * - Ctrl+C without a selection is SIGINT as usual.
+ */
+function installKeys(term: Terminal) {
+  term.attachCustomKeyEventHandler((e) => {
+    if (e.type !== "keydown") return true;
+    if (e.key === "Tab") {
+      e.preventDefault(); // keep focus in the terminal; xterm sends \t (or ESC[Z for Shift+Tab)
+      return true;
+    }
+    const mod = e.ctrlKey || e.metaKey;
+    const key = e.key.toLowerCase();
+    if (mod && e.shiftKey && key === "c") {
+      e.preventDefault();
+      const sel = term.getSelection();
+      if (sel) void navigator.clipboard?.writeText(sel).catch(() => document.execCommand("copy"));
+      return false;
+    }
+    if (mod && e.shiftKey && key === "v") {
+      e.preventDefault();
+      void navigator.clipboard?.readText().then((t) => t && term.paste(t)).catch(() => {});
+      return false;
+    }
+    if (isMac && e.metaKey && !e.shiftKey && key === "c" && term.hasSelection()) {
+      void navigator.clipboard?.writeText(term.getSelection()).catch(() => document.execCommand("copy"));
+      return false;
+    }
+    // ⌘V / Ctrl+V on macOS: let the browser fire its paste event, which xterm handles (bracketed paste aware).
+    if (isMac && e.metaKey && key === "v") return false;
+    return true;
+  });
 }

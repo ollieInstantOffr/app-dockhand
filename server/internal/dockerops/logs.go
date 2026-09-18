@@ -172,10 +172,7 @@ func (s *Service) Exec(ctx context.Context, hostID, ref, cmd string, cols, rows 
 	if !ins.State.Running {
 		return nil, bad("container %s is not running", strings.TrimPrefix(ins.Name, "/"))
 	}
-	argv := strings.Fields(cmd)
-	if len(argv) == 0 {
-		argv = []string{"/bin/sh"}
-	}
+	argv := ShellArgv(cmd)
 	size := &[2]uint{uint(rows), uint(cols)}
 	ectx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -189,4 +186,21 @@ func (s *Service) Exec(ctx context.Context, hostID, ref, cmd string, cols, rows 
 		return nil, fmt.Errorf("exec attach: %w", wrap(err))
 	}
 	return &execTerm{cli: cli, id: ex.ID, rw: hijackRW{r: hj.Reader, w: hj.Conn}, conn: hj.Conn}, nil
+}
+
+// autoShell starts the best interactive shell the image has: bash (completion,
+// history, line editing), then ash/busybox sh, then plain sh.
+const autoShell = `if command -v bash >/dev/null 2>&1; then exec bash; ` +
+	`elif command -v ash >/dev/null 2>&1; then exec ash; ` +
+	`elif command -v zsh >/dev/null 2>&1; then exec zsh; ` +
+	`else exec sh; fi`
+
+// ShellArgv turns the exec "cmd" parameter into argv. Empty, "auto" and the
+// old default "/bin/sh" pick the best available shell.
+func ShellArgv(cmd string) []string {
+	cmd = strings.TrimSpace(cmd)
+	if cmd == "" || cmd == "auto" || cmd == "/bin/sh" || cmd == "sh" {
+		return []string{"/bin/sh", "-c", autoShell}
+	}
+	return strings.Fields(cmd)
 }

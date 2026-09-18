@@ -631,6 +631,15 @@ type UpdaterStatus struct {
 	Log        []string   `json:"log"` // last lines of its output
 }
 
+// UpdateHistoryPage is GET /api/system/history.
+type UpdateHistoryPage struct {
+	Items []UpdateHistory `json:"items"`
+	Total int             `json:"total"`
+	Page  int             `json:"page"`
+	Pages int             `json:"pages"`
+	Limit int             `json:"limit"`
+}
+
 type SystemInfo struct {
 	Version         string          `json:"version"`
 	Latest          string          `json:"latest"`

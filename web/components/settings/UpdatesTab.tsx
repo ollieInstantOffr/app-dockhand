@@ -6,7 +6,7 @@ import { Dropdown, LogBlock, ProgressList, Seg } from "@/components/ui";
 import { useShell } from "@/components/shell/context";
 import { errMsg, invalidate, post, useApi, useJob } from "@/lib/api";
 import { C, ago, shortSha } from "@/lib/format";
-import type { JobRef, Settings, SystemInfo, UpdaterStatus } from "@/lib/types";
+import type { JobRef, Settings, SystemInfo, UpdateHistoryPage, UpdaterStatus } from "@/lib/types";
 import { InkButton, InkHead, PILL, SetToggle, StatusPill, cardStyle, colStack, rowStyle, twoCol, useSettings } from "./common";
 
 const WINDOWS = ["Sun 03:00–05:00", "Daily 04:00–05:00", "Sat 02:00–04:00", "Any time"];
@@ -372,9 +372,20 @@ function SourceCard({ sys }: { sys?: SystemInfo }) {
   );
 }
 
+const HISTORY_PAGE = 5;
+
 function HistoryCard({ sys, busy, onRollback }: { sys?: SystemInfo; busy: boolean; onRollback: () => void }) {
-  const hist = sys?.history ?? [];
-  const canRollback = hist.some((h) => h.status === "success" && h.fromVersion);
+  const [page, setPage] = useState(1);
+  const { data } = useApi<UpdateHistoryPage>(`/api/system/history?page=${page}&limit=${HISTORY_PAGE}`, { refresh: 15000 });
+  const hist = data?.items ?? [];
+  const pages = data?.pages ?? 1;
+  // Rolling back needs a successful update with a known previous version (checked on the full, unpaged list).
+  const canRollback = (sys?.history ?? []).some((h) => h.status === "success" && h.fromVersion);
+  useEffect(() => {
+    if (data && page > data.pages) setPage(data.pages);
+  }, [data, page]);
+  const isCurrent = (ver: string) =>
+    !!sys && (ver === sys.version || ver.replace(/^v/, "") === sys.version.replace(/^v/, "") || (!!sys.currentCommit && ver.startsWith(sys.currentCommit)));
   return (
     <div className="glass-card" style={cardStyle(12)}>
       <InkHead title="Update history">
@@ -382,15 +393,15 @@ function HistoryCard({ sys, busy, onRollback }: { sys?: SystemInfo; busy: boolea
           Roll back
         </InkButton>
       </InkHead>
-      {!sys && [0, 1, 2].map((i) => <span key={i} className="skel" style={{ height: 50, borderRadius: 14 }} />)}
-      {sys && !hist.length && <span style={{ fontSize: 13, color: "var(--ink-3)" }}>No updates yet — this is the version you installed.</span>}
+      {!data && [0, 1, 2].map((i) => <span key={i} className="skel" style={{ height: 50, borderRadius: 14 }} />)}
+      {data && !data.total && <span style={{ fontSize: 13, color: "var(--ink-3)" }}>No updates yet — this is the version you installed.</span>}
       {hist.map((h) => (
         <div key={h.id} style={rowStyle(true, { padding: "10px 12px" })}>
-          <span className="dot" style={{ background: h.status === "success" ? C.ok : h.status === "failed" ? C.crit : h.status === "running" ? C.blue : "var(--muted)" }} />
+          <span className="dot" style={{ background: h.status === "success" ? C.ok : h.status === "failed" ? C.crit : h.status === "running" || h.status === "pending" ? C.blue : "var(--muted)" }} />
           <span style={{ display: "flex", flexDirection: "column", gap: 1, flex: 1, minWidth: 0 }}>
             <span className="mono" style={{ fontSize: 13, fontWeight: 700 }}>
               {v(h.version)}
-              {h.version === sys?.version && <span className="tag blue" style={{ marginLeft: 8, fontFamily: "var(--font)", fontSize: 10, padding: "2px 6px" }}>current</span>}
+              {isCurrent(h.version) && <span className="tag blue" style={{ marginLeft: 8, fontFamily: "var(--font)", fontSize: 10, padding: "2px 6px" }}>current</span>}
             </span>
             <span className="ellipsis" style={{ fontSize: 11.5, color: "var(--ink-3)" }}>
               {[h.fromVersion ? `from ${v(h.fromVersion)}` : "", h.note, h.status !== "success" ? h.status : ""].filter(Boolean).join(" · ")}
@@ -399,6 +410,22 @@ function HistoryCard({ sys, busy, onRollback }: { sys?: SystemInfo; busy: boolea
           <span style={{ fontSize: 11.5, color: "var(--ink-3)", whiteSpace: "nowrap" }} title={new Date(h.at).toLocaleString()}>{ago(h.at)}</span>
         </div>
       ))}
+      {data && pages > 1 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 2 }}>
+          <span style={{ fontSize: 12, color: "var(--ink-3)", flex: 1 }}>
+            {(page - 1) * HISTORY_PAGE + 1}–{Math.min(page * HISTORY_PAGE, data.total)} of {data.total}
+          </span>
+          <button type="button" className="btn2 sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} aria-label="Newer">
+            <Icon name="chevron" size={14} style={{ transform: "rotate(90deg)" }} />
+            Newer
+          </button>
+          <span className="mono" style={{ fontSize: 11.5, color: "var(--ink-3)", minWidth: 42, textAlign: "center" }}>{page} / {pages}</span>
+          <button type="button" className="btn2 sm" disabled={page >= pages} onClick={() => setPage((p) => Math.min(pages, p + 1))} aria-label="Older">
+            Older
+            <Icon name="chevron" size={14} style={{ transform: "rotate(-90deg)" }} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

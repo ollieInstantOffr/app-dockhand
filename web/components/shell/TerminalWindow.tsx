@@ -251,7 +251,7 @@ export function TerminalWindow({ requests, onClose }: { requests: { target: Term
     const name = t.kind === "shell" ? "" : t.name ?? ctrById.get(`${t.hostId}/${t.containerId}`)?.name ?? t.containerId.slice(0, 12);
     if (t.kind === "shell") return h ? `ssh ${h.user || "root"}@${h.address}${h.port && h.port !== 22 ? ` -p ${h.port}` : ""}` : "ssh";
     const on = h ? ` · ${h.name}` : "";
-    return t.kind === "exec" ? `docker exec -it ${name} /bin/sh${on}` : `docker logs -f ${name}${on}`;
+    return t.kind === "exec" ? `docker exec -it ${name} bash${on}` : `docker logs -f ${name}${on}`;
   };
 
   const copyOutput = async () => {
@@ -509,7 +509,7 @@ export function TerminalWindow({ requests, onClose }: { requests: { target: Term
               />
             );
           }
-          const path = t.target.kind === "shell" ? `/api/hosts/${t.target.hostId}/shell` : `/api/hosts/${t.target.hostId}/containers/${t.target.containerId}/exec?cmd=${encodeURIComponent("/bin/sh")}`;
+          const path = t.target.kind === "shell" ? `/api/hosts/${t.target.hostId}/shell` : `/api/hosts/${t.target.hostId}/containers/${t.target.containerId}/exec?cmd=auto`;
           return (
             <XTerm
               key={t.key}

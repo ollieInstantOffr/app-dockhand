@@ -506,6 +506,17 @@ func (s *Server) systemCheck(w http.ResponseWriter, r *http.Request) {
 	ok(w, info)
 }
 
+func (s *Server) systemHistory(w http.ResponseWriter, r *http.Request) {
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	h, err := s.System.History(r.Context(), page, limit)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	ok(w, h)
+}
+
 func (s *Server) systemUpdater(w http.ResponseWriter, r *http.Request) {
 	st, err := s.System.UpdaterStatus(r.Context())
 	if err != nil {
