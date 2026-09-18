@@ -69,7 +69,8 @@ set `DOCKHAND_PUBLIC_URL` to an address GitHub can reach.
 ### MCP
 
 Enable it in Settings → MCP, create an API key, and point your client at `<public url>/mcp` (Streamable HTTP)
-with `Authorization: Bearer <key>`. Write tools can require an explicit `confirm: true` argument.
+with `Authorization: Bearer <key>`. Write tools can require an explicit `confirm: true` argument. MCP shares
+Dockhand's port, so production needs only one opening; a dedicated MCP port is optional (Settings → MCP → Port).
 
 ## Development
 

@@ -192,6 +192,13 @@ func run(cfg *config.Config) error {
 	if err := st.Load(rootCtx); err != nil {
 		return fmt.Errorf("load settings: %w", err)
 	}
+	// Installs from when compose published a dedicated MCP port by default (8787) move back
+	// to /mcp on Dockhand's own port unless that port is still published.
+	if cfg.MCPPort == 0 && st.Get().MCP.Port == 8787 {
+		if err := st.Update(rootCtx, "mcp", func(s *settings.Settings) { s.MCP.Port = 0 }); err != nil {
+			slog.Warn("reset mcp port", "err", err)
+		}
+	}
 	hostKey, err := sshkeys.LoadOrCreate(rootCtx, st, box, sshkeys.KeyHost, "dockhand")
 	if err != nil {
 		return fmt.Errorf("ssh key: %w", err)
