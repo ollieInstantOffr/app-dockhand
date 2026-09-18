@@ -1,0 +1,79 @@
+name: dockhand
+
+x-db-url: &db-url postgresql://${POSTGRES_USER:-dockhand}:${POSTGRES_PASSWORD:-dockhand}@db:5432/${POSTGRES_DB:-dockhand}?sslmode=disable
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dockhand}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dockhand}
+      POSTGRES_DB: ${POSTGRES_DB:-dockhand}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # Applies Prisma migrations, then exits.
+  migrate:
+    build: ./db
+    environment:
+      DATABASE_URL: *db-url
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  # Next.js UI. Not published: the API proxies page requests to it.
+  web:
+    build: ./web
+    restart: unless-stopped
+    environment:
+      DOCKHAND_API_URL: http://api:8080
+
+  # Go API: the public entrypoint (UI proxy, REST, WebSockets, MCP, webhooks).
+  api:
+    build:
+      context: ./server
+      args:
+        DOCKHAND_VERSION: ${DOCKHAND_VERSION:-1.0.0}
+    restart: unless-stopped
+    ports:
+      - "${DOCKHAND_PORT:-3000}:8080"
+      # Dedicated MCP endpoint (Settings → MCP → Port). Same number inside and out.
+      - "${DOCKHAND_MCP_PORT:-8787}:${DOCKHAND_MCP_PORT:-8787}"
+    environment:
+      DATABASE_URL: *db-url
+      DOCKHAND_SECRET: ${DOCKHAND_SECRET:?set DOCKHAND_SECRET in .env}
+      DOCKHAND_PUBLIC_URL: ${DOCKHAND_PUBLIC_URL:-http://localhost:3000}
+      DOCKHAND_WEB_URL: http://web:3000
+      DOCKHAND_AUTO_LOCAL: ${DOCKHAND_AUTO_LOCAL:-true}
+      DOCKHAND_MCP_PORT: ${DOCKHAND_MCP_PORT:-8787}
+      DOCKHAND_STACKS_DIR: /opt/dockhand/stacks
+      DOCKHAND_BACKUPS_DIR: /opt/dockhand/backups
+      GITHUB_OAUTH_CLIENT_ID: ${GITHUB_OAUTH_CLIENT_ID:-}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_SLUG: ${GITHUB_APP_SLUG:-}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+    volumes:
+      # Manage the machine Dockhand runs on ("local" host) and run self-updates.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Same path inside and out, so compose bind mounts of local stacks resolve on the host.
+      - ${DOCKHAND_HOME:-/opt/dockhand}:/opt/dockhand
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      web:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  pgdata:

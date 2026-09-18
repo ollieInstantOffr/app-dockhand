@@ -1,0 +1,140 @@
+package api
+
+import "github.com/go-chi/chi/v5"
+
+// registerAPI mounts every /api route. Keep this list in sync with docs/API.md.
+func (s *Server) registerAPI(r chi.Router) {
+	// Public
+	r.Get("/healthz", s.healthz)
+	r.Get("/auth/state", s.authState)
+	r.Post("/auth/setup", s.authSetup)
+	r.Post("/auth/login", s.authLogin)
+	r.Get("/public/status", s.publicStatus)
+	r.Post("/webhooks/github", s.githubWebhook)
+	r.Get("/github/app/callback", s.githubAppCallback)
+
+	// Auth & account
+	r.Post("/auth/logout", s.authLogout)
+	r.Get("/account", s.account)
+	r.Patch("/account", s.patchAccount)
+	r.Delete("/account/sessions/{id}", s.revokeSession)
+	r.Get("/ssh-key", s.sshKey)
+	r.Get("/deploy-key", s.deployKey)
+
+	// Overview & search
+	r.Get("/overview", s.overview)
+	r.Get("/containers", s.allContainers)
+
+	// Hosts
+	r.Get("/hosts", s.listHosts)
+	r.Post("/hosts", s.createHost)
+	r.Post("/hosts/test", s.testNewHost)
+	r.Get("/hosts/{id}", s.getHost)
+	r.Patch("/hosts/{id}", s.patchHost)
+	r.Delete("/hosts/{id}", s.deleteHost)
+	r.Post("/hosts/{id}/test", s.testHost)
+	r.Post("/hosts/{id}/reboot", s.rebootHost)
+	r.Post("/hosts/{id}/prune", s.pruneHost)
+	r.Post("/hosts/{id}/update-all", s.updateAll)
+	r.Get("/hosts/{id}/metrics", s.hostMetrics)
+	r.Get("/hosts/{id}/disk", s.hostDisk)
+	r.Get("/hosts/{id}/shell", s.hostShell)
+
+	// Containers
+	r.Get("/hosts/{id}/containers", s.listContainers)
+	r.Post("/hosts/{id}/containers/bulk", s.bulkContainers)
+	r.Get("/hosts/{id}/containers/{cid}", s.containerDetail)
+	r.Patch("/hosts/{id}/containers/{cid}", s.patchContainer)
+	r.Delete("/hosts/{id}/containers/{cid}", s.deleteContainer)
+	r.Get("/hosts/{id}/containers/{cid}/logs", s.containerLogs)
+	r.Get("/hosts/{id}/containers/{cid}/logs/ws", s.containerLogsWS)
+	r.Get("/hosts/{id}/containers/{cid}/exec", s.containerExec)
+	r.Post("/hosts/{id}/containers/{cid}/{action}", s.containerAction)
+	r.Post("/containers/run", s.runContainer)
+	r.Post("/containers/run/dry-run", s.runContainerDryRun)
+
+	// Stacks
+	r.Get("/hosts/{id}/stacks", s.listStacks)
+	r.Post("/hosts/{id}/stacks", s.createStack)
+	r.Get("/hosts/{id}/stacks/{name}/compose", s.getCompose)
+	r.Put("/hosts/{id}/stacks/{name}/compose", s.putCompose)
+	r.Patch("/hosts/{id}/stacks/{name}", s.patchStack)
+	r.Post("/hosts/{id}/stacks/{name}/{action}", s.stackAction)
+	r.Post("/compose/validate", s.validateCompose)
+	r.Get("/compose/templates", s.composeTemplates)
+
+	// Images
+	r.Get("/hosts/{id}/images", s.listImages)
+	r.Post("/hosts/{id}/images/prune", s.pruneImages)
+	r.Delete("/hosts/{id}/images/{iid}", s.deleteImage)
+	r.Post("/images/pull", s.pullImage)
+	r.Get("/images/tags", s.imageTags)
+	r.Get("/images/inspect", s.imageInspect)
+	r.Get("/images/search", s.imageSearch)
+
+	// Volumes
+	r.Get("/hosts/{id}/volumes", s.listVolumes)
+	r.Post("/hosts/{id}/volumes/backup", s.backupVolumes)
+	r.Delete("/hosts/{id}/volumes/{name}", s.deleteVolume)
+
+	// Networks
+	r.Get("/hosts/{id}/networks", s.listNetworks)
+	r.Post("/hosts/{id}/networks", s.createNetwork)
+	r.Post("/hosts/{id}/networks/prune", s.pruneNetworks)
+	r.Get("/hosts/{id}/networks/{nid}", s.inspectNetwork)
+	r.Delete("/hosts/{id}/networks/{nid}", s.deleteNetwork)
+	r.Post("/hosts/{id}/networks/{nid}/connect", s.connectNetwork)
+	r.Post("/hosts/{id}/networks/{nid}/disconnect", s.disconnectNetwork)
+
+	// Jobs
+	r.Get("/jobs", s.listJobs)
+	r.Get("/jobs/{id}", s.getJob)
+
+	// GitHub
+	r.Get("/github/accounts", s.gitAccounts)
+	r.Post("/github/accounts", s.createGitAccount)
+	r.Patch("/github/accounts/{id}", s.patchGitAccount)
+	r.Delete("/github/accounts/{id}", s.deleteGitAccount)
+	r.Post("/github/accounts/{id}/sync", s.syncGitAccount)
+	r.Post("/github/oauth/device", s.oauthDevice)
+	r.Post("/github/oauth/poll", s.oauthPoll)
+	r.Get("/github/repos", s.gitRepos)
+	r.Get("/github/account-repos", s.gitAccountRepos)
+	r.Get("/github/repos/{owner}/{name}/branches", s.gitBranches)
+	r.Get("/github/repos/{owner}/{name}/inspect", s.gitInspect)
+	r.Post("/deploy/git", s.deployGit)
+	r.Post("/deploy/git/dry-run", s.deployGitDryRun)
+	r.Post("/deploy/check", s.deployCheck)
+	r.Post("/settings/github/rotate-secret", s.rotateSecret)
+
+	// Uptime
+	r.Get("/uptime", s.uptimeOverview)
+	r.Post("/monitors", s.createMonitor)
+	r.Patch("/monitors/{id}", s.patchMonitor)
+	r.Delete("/monitors/{id}", s.deleteMonitor)
+	r.Post("/monitors/{id}/check", s.checkMonitor)
+
+	// Alerts & notifications
+	r.Get("/alerts", s.listAlerts)
+	r.Post("/alerts/read-all", s.readAllAlerts)
+	r.Post("/alerts/{id}/read", s.readAlert)
+	r.Post("/alerts/{id}/snooze", s.snoozeAlert)
+	r.Get("/notifications/channels", s.listChannels)
+	r.Post("/notifications/channels", s.createChannel)
+	r.Patch("/notifications/channels/{id}", s.patchChannel)
+	r.Delete("/notifications/channels/{id}", s.deleteChannel)
+	r.Post("/notifications/channels/{id}/test", s.testChannel)
+
+	// Settings, MCP, system
+	r.Get("/settings", s.getSettings)
+	r.Patch("/settings", s.patchSettings)
+	r.Get("/mcp", s.mcpStatus)
+	r.Get("/mcp/keys", s.mcpKeys)
+	r.Post("/mcp/keys", s.createMcpKey)
+	r.Delete("/mcp/keys/{id}", s.revokeMcpKey)
+	r.Get("/mcp/activity", s.mcpActivity)
+	r.Get("/system", s.systemInfo)
+	r.Post("/system/check", s.systemCheck)
+	r.Post("/system/update", s.systemUpdate)
+	r.Post("/system/rollback", s.systemRollback)
+}

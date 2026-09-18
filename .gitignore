@@ -1,0 +1,9 @@
+node_modules/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+db/generated/
+server/bin/
+.env
+.DS_Store
+graphify-out/

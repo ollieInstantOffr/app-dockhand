@@ -1,0 +1,11 @@
+{
+  "name": "dockhand-db",
+  "private": true,
+  "scripts": {
+    "migrate": "prisma migrate deploy",
+    "diff": "prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script"
+  },
+  "devDependencies": {
+    "prisma": "7.10.0"
+  }
+}

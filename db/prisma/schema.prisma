@@ -1,0 +1,342 @@
+// Dockhand database schema.
+//
+// Prisma owns the schema and migrations (`prisma migrate deploy` runs in the
+// `migrate` service before the API starts). The Go API reads and writes these
+// tables directly with pgx, so every table and column is mapped to snake_case.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Accounts ──────────────────────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String
+  username     String    @unique
+  passwordHash String    @map("password_hash")
+  role         String    @default("admin")
+  theme        String    @default("system") // light | dark | system
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  sessions     Session[]
+
+  @@map("users")
+}
+
+model Session {
+  id         String   @id // sha256 of the cookie token
+  userId     String   @map("user_id") @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userAgent  String   @default("") @map("user_agent")
+  ip         String   @default("")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  lastSeenAt DateTime @default(now()) @map("last_seen_at") @db.Timestamptz
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+// Key/value settings. Values are JSON documents owned by the API
+// (uptime, github, mcp, updates, notifications, ssh_key, deploy_key, …).
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("settings")
+}
+
+// ─── Hosts ─────────────────────────────────────────────────────────────────
+
+model Host {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String    @unique
+  address       String
+  port          Int       @default(22)
+  sshUser       String    @default("root") @map("ssh_user")
+  method        String    @default("key") // key | password | local
+  passwordEnc   String?   @map("password_enc") // AES-GCM, base64
+  hostKey       String    @default("") @map("host_key") // pinned on first connect (TOFU), authorized_keys format
+  color         String    @default("#2f6fed")
+  status        String    @default("pending") // pending | online | degraded | offline
+  os            String    @default("")
+  kernel        String    @default("")
+  dockerVersion String    @default("") @map("docker_version")
+  cpuCores      Int       @default(0) @map("cpu_cores")
+  uptimeSec     BigInt    @default(0) @map("uptime_sec")
+  cpu           Float     @default(0)
+  memUsed       BigInt    @default(0) @map("mem_used")
+  memTotal      BigInt    @default(0) @map("mem_total")
+  diskUsed      BigInt    @default(0) @map("disk_used")
+  diskTotal     BigInt    @default(0) @map("disk_total")
+  lastSeenAt    DateTime? @map("last_seen_at") @db.Timestamptz
+  lastError     String    @default("") @map("last_error")
+  failCount     Int       @default(0) @map("fail_count")
+  monitored     Boolean   @default(true)
+  mcpExposed    Boolean   @default(true) @map("mcp_exposed")
+  sortOrder     Int       @default(0) @map("sort_order")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  metrics     HostMetric[]
+  stacks      Stack[]
+  deployments Deployment[]
+  monitors    Monitor[]
+  alerts      Alert[]
+  events      ContainerEvent[]
+
+  @@map("hosts")
+}
+
+model HostMetric {
+  id     BigInt   @id @default(autoincrement())
+  hostId String   @map("host_id") @db.Uuid
+  host   Host     @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  at     DateTime @default(now()) @db.Timestamptz
+  cpu    Float
+  mem    Float // percent
+  disk   Float // percent
+
+  @@index([hostId, at])
+  @@map("host_metrics")
+}
+
+// Container lifecycle events (docker events + actions taken through Dockhand).
+model ContainerEvent {
+  id        BigInt   @id @default(autoincrement())
+  hostId    String   @map("host_id") @db.Uuid
+  host      Host     @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  container String // container name
+  action    String
+  actor     String   @default("docker") // docker | username | mcp:<key name> | auto-deploy
+  at        DateTime @default(now()) @db.Timestamptz
+
+  @@index([hostId, container, at])
+  @@map("container_events")
+}
+
+// ─── Stacks & deployments ──────────────────────────────────────────────────
+
+// Compose stacks Dockhand manages. Unmanaged compose projects found on a host
+// are discovered live from container labels and are not stored here.
+model Stack {
+  id            String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  hostId        String     @map("host_id") @db.Uuid
+  host          Host       @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  name          String
+  path          String // directory on the host
+  composeFile   String     @default("docker-compose.yml") @map("compose_file")
+  source        String     @default("manual") // manual | git | image
+  gitAccountId  String?    @map("git_account_id") @db.Uuid
+  gitAccount    GitAccount? @relation(fields: [gitAccountId], references: [id], onDelete: SetNull)
+  repoFullName  String?    @map("repo_full_name")
+  branch        String?
+  sha           String?
+  autoDeploy    Boolean    @default(false) @map("auto_deploy")
+  env           Json       @default("[]")
+  lastDeployAt  DateTime?  @map("last_deploy_at") @db.Timestamptz
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  deployments   Deployment[]
+
+  @@unique([hostId, name])
+  @@map("stacks")
+}
+
+// Long-running jobs: deploys, pulls, updates, backups. Steps and log are
+// JSON arrays appended to while the job runs; the UI polls /api/jobs/:id.
+model Deployment {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  kind       String // git | image | compose | pull | update | backup | stack | self-update
+  title      String
+  hostId     String?   @map("host_id") @db.Uuid
+  host       Host?     @relation(fields: [hostId], references: [id], onDelete: SetNull)
+  stackId    String?   @map("stack_id") @db.Uuid
+  stack      Stack?    @relation(fields: [stackId], references: [id], onDelete: SetNull)
+  status     String    @default("running") // running | success | failed
+  steps      Json      @default("[]")
+  log        Json      @default("[]")
+  result     Json      @default("{}")
+  actor      String    @default("")
+  startedAt  DateTime  @default(now()) @map("started_at") @db.Timestamptz
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz
+
+  @@index([startedAt])
+  @@map("deployments")
+}
+
+// ─── GitHub ────────────────────────────────────────────────────────────────
+
+model GitAccount {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  login          String
+  kind           String    @default("user") // user | org | enterprise
+  method         String    @default("pat") // app | oauth | pat
+  serverUrl      String    @default("https://github.com") @map("server_url")
+  apiUrl         String    @default("https://api.github.com") @map("api_url")
+  tokenEnc       String    @default("") @map("token_enc")
+  installationId BigInt?   @map("installation_id")
+  enabled        Boolean   @default(true)
+  repoAccess     String    @default("all") @map("repo_access") // all | selected
+  selectedRepos  Json      @default("[]") @map("selected_repos")
+  webhook        Boolean   @default(true)
+  color          String    @default("#7a5cf0")
+  lastSyncAt     DateTime? @map("last_sync_at") @db.Timestamptz
+  lastError      String    @default("") @map("last_error")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  repos          GitRepo[]
+  stacks         Stack[]
+
+  @@map("git_accounts")
+}
+
+model GitRepo {
+  id            BigInt     @id // GitHub repository id
+  accountId     String     @map("account_id") @db.Uuid
+  account       GitAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  owner         String
+  name          String
+  private       Boolean    @default(false)
+  description   String     @default("")
+  defaultBranch String     @default("main") @map("default_branch")
+  composeFiles  Json       @default("[]") @map("compose_files")
+  pushedAt      DateTime?  @map("pushed_at") @db.Timestamptz
+  syncedAt      DateTime   @default(now()) @map("synced_at") @db.Timestamptz
+
+  @@index([accountId])
+  @@map("git_repos")
+}
+
+// ─── Uptime ────────────────────────────────────────────────────────────────
+
+model Monitor {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  type        String // host | docker | http | tcp
+  hostId      String?       @map("host_id") @db.Uuid
+  host        Host?         @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  target      String        @default("") // container name | URL | host:port
+  expect      String        @default("") // expected HTTP status, e.g. "200-399"
+  enabled     Boolean       @default(true)
+  auto        Boolean       @default(false) // created by auto-monitor
+  status      String        @default("unknown") // up | degraded | down | unknown
+  failCount   Int           @default(0) @map("fail_count")
+  lastCheckAt DateTime?     @map("last_check_at") @db.Timestamptz
+  lastLatency Int           @default(0) @map("last_latency")
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  results     CheckResult[]
+  incidents   Incident[]
+
+  @@index([hostId])
+  @@map("monitors")
+}
+
+model CheckResult {
+  id        BigInt   @id @default(autoincrement())
+  monitorId String   @map("monitor_id") @db.Uuid
+  monitor   Monitor  @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  at        DateTime @default(now()) @db.Timestamptz
+  status    String // up | degraded | down
+  latencyMs Int      @default(0) @map("latency_ms")
+  message   String   @default("")
+
+  @@index([monitorId, at])
+  @@map("check_results")
+}
+
+model Incident {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  monitorId String    @map("monitor_id") @db.Uuid
+  monitor   Monitor   @relation(fields: [monitorId], references: [id], onDelete: Cascade)
+  status    String    @default("down") // down | degraded
+  message   String    @default("")
+  startedAt DateTime  @default(now()) @map("started_at") @db.Timestamptz
+  endedAt   DateTime? @map("ended_at") @db.Timestamptz
+
+  @@index([startedAt])
+  @@map("incidents")
+}
+
+// ─── Alerts & notifications ────────────────────────────────────────────────
+
+model Alert {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  dedupeKey    String    @unique @map("dedupe_key")
+  severity     String // crit | warn | info | ok
+  kind         String // host_down | container_exited | unhealthy | disk | memory | update | deploy | …
+  title        String
+  text         String    @default("")
+  hostId       String?   @map("host_id") @db.Uuid
+  host         Host?     @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  action       String    @default("Open")
+  href         String    @default("/")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  readAt       DateTime? @map("read_at") @db.Timestamptz
+  snoozedUntil DateTime? @map("snoozed_until") @db.Timestamptz
+  resolvedAt   DateTime? @map("resolved_at") @db.Timestamptz
+
+  @@index([createdAt])
+  @@map("alerts")
+}
+
+model NotificationChannel {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type      String // email | slack | discord | ntfy | webhook
+  name      String
+  config    Json     @default("{}")
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("notification_channels")
+}
+
+// ─── MCP ───────────────────────────────────────────────────────────────────
+
+model ApiKey {
+  id         String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String
+  client     String        @default("claude") // claude | cursor | other
+  prefix     String // first chars shown in the UI, e.g. "dh_live_9f2c"
+  hash       String        @unique // sha256 of the full key
+  scope      String        @default("read") // read | full | custom
+  groups     Json          @default("[]") // tool groups for custom scope
+  hostIds    Json          @default("[]") @map("host_ids") // [] = all exposed hosts
+  expiresAt  DateTime?     @map("expires_at") @db.Timestamptz
+  lastUsedAt DateTime?     @map("last_used_at") @db.Timestamptz
+  revokedAt  DateTime?     @map("revoked_at") @db.Timestamptz
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  activity   McpActivity[]
+
+  @@map("api_keys")
+}
+
+model McpActivity {
+  id       BigInt   @id @default(autoincrement())
+  apiKeyId String?  @map("api_key_id") @db.Uuid
+  apiKey   ApiKey?  @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  client   String
+  tool     String
+  detail   String   @default("")
+  ok       Boolean  @default(true)
+  at       DateTime @default(now()) @db.Timestamptz
+
+  @@index([at])
+  @@map("mcp_activity")
+}
+
+// ─── Self-update ───────────────────────────────────────────────────────────
+
+model UpdateHistory {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  version     String
+  fromVersion String   @default("") @map("from_version")
+  status      String // success | failed | rolled-back
+  note        String   @default("")
+  at          DateTime @default(now()) @db.Timestamptz
+
+  @@map("update_history")
+}
