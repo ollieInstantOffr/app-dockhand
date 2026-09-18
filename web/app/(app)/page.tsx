@@ -75,11 +75,14 @@ export default function FleetPage() {
   const totalCtr = segs.reduce((a, g) => a + g.n, 0);
 
   const filterHosts = segFilter ? segs.find((g) => g.key === segFilter)?.hosts : null;
+  // Opening a host from a donut segment lands on its Containers tab filtered to that status.
+  const SEG_STATUS: Record<SegKey, string> = { running: "running", unhealthy: "unhealthy", stopped: "stopped", down: "crashed" };
+  const hostHref = (id: string, seg: SegKey | null) => `/hosts/${id}${seg ? `?status=${SEG_STATUS[seg]}` : ""}`;
   const pickSeg = (k: SegKey) => {
     const g = segs.find((x) => x.key === k);
     if (!g || g.n === 0) return;
     if (g.hosts.size === 1) {
-      router.push(`/hosts/${[...g.hosts][0]}`);
+      router.push(hostHref([...g.hosts][0], k));
       return;
     }
     setSegFilter(segFilter === k ? null : k);
@@ -145,7 +148,7 @@ export default function FleetPage() {
         <div style={GRID}>
           <FleetCard segs={segs} total={totalCtr} hosts={hosts.length} loaded={!!containers} active={segFilter} onPick={pickSeg} onClear={() => setSegFilter(null)} />
           {hosts.map((h) => (
-            <HostCard key={h.id} h={h} dim={!!filterHosts && !filterHosts.has(h.id)} onOpen={() => router.push(`/hosts/${h.id}`)} />
+            <HostCard key={h.id} h={h} dim={!!filterHosts && !filterHosts.has(h.id)} onOpen={() => router.push(hostHref(h.id, filterHosts?.has(h.id) ? segFilter : null))} />
           ))}
         </div>
       )}

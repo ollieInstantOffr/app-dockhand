@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { del, invalidate, post } from "@/lib/api";
 import { C, bytesShort, containerColor, containerStateLabel, duration, ago, portsText, since } from "@/lib/format";
 import type { Container, ContainerAction, Host, JobRef } from "@/lib/types";
+import { NO_STACK, STATUS_FILTERS, visibleContainers, type ContainerView } from "@/lib/containerFilters";
 import { EmptyState, Skel, useOutside, type MenuItem } from "../ui";
 import { Icon, type IconName } from "../icons";
 import { useShell } from "../shell/context";
@@ -88,14 +89,14 @@ export function ContainersTab({
   hostId,
   host,
   containers,
-  filter,
+  view,
   selected,
   setSelected,
 }: {
   hostId: string;
   host: Host | undefined;
   containers: Container[] | undefined;
-  filter: string;
+  view: ContainerView;
   selected: Set<string>;
   setSelected: (s: Set<string>) => void;
 }) {
@@ -138,9 +139,10 @@ export function ContainersTab({
       </EmptyState>
     );
   }
-  const shown = sortContainers(containers).filter((c) => matchContainer(c, filter));
+  const shown = visibleContainers(containers, view);
   if (!shown.length) {
-    return <div style={{ padding: "28px 4px", fontSize: 13.5, color: "var(--ink-3)" }}>No containers match “{filter}”.</div>;
+    const what = [view.status !== "all" && STATUS_FILTERS.find((f) => f.value === view.status)?.label.toLowerCase(), view.stack && (view.stack === NO_STACK ? "outside any stack" : `in ${view.stack}`), view.q && `matching “${view.q}”`].filter(Boolean).join(", ");
+    return <div style={{ padding: "28px 4px", fontSize: 13.5, color: "var(--ink-3)" }}>No containers {what || "to show"}.</div>;
   }
   const toggle = (id: string) => {
     const n = new Set(selected);

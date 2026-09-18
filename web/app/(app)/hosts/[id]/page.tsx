@@ -11,6 +11,8 @@ import { useShell } from "@/components/shell/context";
 import { HoverStyles } from "@/components/host/HoverStyles";
 import { HostHeader, OfflineBanner } from "@/components/host/HostHeader";
 import { ContainersTab } from "@/components/host/ContainersTab";
+import { ContainerFilters } from "@/components/host/ContainerFilters";
+import { SORTS, STATUS_FILTERS, visibleContainers, type ContainerView, type SortKey, type StatusFilter } from "@/lib/containerFilters";
 import { StacksTab } from "@/components/host/StacksTab";
 import { StorageTab } from "@/components/host/StorageTab";
 import { NetworksTab } from "@/components/host/NetworksTab";
@@ -42,7 +44,28 @@ function HostView() {
   const tab: Tab = rawTab && (TABS as string[]).includes(rawTab) ? (rawTab as Tab) : (rawTab && TAB_ALIAS[rawTab]) || "containers";
   const cParam = params.get("c");
 
-  const [filter, setFilter] = useState("");
+  // Container view state lives in the URL (?status=unhealthy&stack=web&sort=cpu&q=…) so it can be linked.
+  const view: ContainerView = {
+    q: params.get("q") ?? "",
+    status: (STATUS_FILTERS.some((f) => f.value === params.get("status")) ? params.get("status") : "all") as StatusFilter,
+    stack: params.get("stack") ?? "",
+    sort: (SORTS.some((s) => s.value === params.get("sort")) ? params.get("sort") : "status") as SortKey,
+  };
+  const setView = useCallback(
+    (p: Partial<ContainerView>) => {
+      const q = new URLSearchParams(params.toString());
+      const next = { ...view, ...p };
+      const put = (k: string, v: string, def: string) => (v && v !== def ? q.set(k, v) : q.delete(k));
+      put("q", next.q, "");
+      put("status", next.status, "all");
+      put("stack", next.stack, "");
+      put("sort", next.sort, "status");
+      const s = q.toString();
+      router.replace(s ? `${pathname}?${s}` : pathname, { scroll: false });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [params, pathname, router, view.q, view.status, view.stack, view.sort],
+  );
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const base = `/api/hosts/${id}`;
@@ -170,7 +193,7 @@ function HostView() {
                   {plural(updateCount, "update")}
                 </button>
               )}
-              <input className="filter-input" placeholder="Filter…" value={filter} onChange={(e) => setFilter(e.target.value)} />
+              <FilterInput value={view.q} onChange={(q) => setView({ q })} />
               {selected.size > 0 && (
                 <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, padding: "5px 6px 5px 14px", borderRadius: 14, background: "var(--btn)", color: "var(--btn-ink)", fontSize: 13, boxShadow: "0 10px 24px rgba(23,26,33,.25)", animation: "rise .25s ease both", flexWrap: "wrap" }}>
                   <span style={{ fontWeight: 600 }}>{selected.size} selected</span>
@@ -190,7 +213,16 @@ function HostView() {
 
         {/* A failed fetch shows an error card instead of an endless skeleton (offline hosts get the banner above). */}
         {!offline && tabError(tab, { containers: !containers && ctrErr, stacks: !stacks && stacksErr, storage: (!images && imagesErr) || (!volumes && volumesErr), networks: !networks && networksErr }, base)}
-        {tab === "containers" && !(!containers && ctrErr) && <ContainersTab hostId={id} host={host} containers={containers} filter={filter} selected={selected} setSelected={setSelected} />}
+        {tab === "containers" && containers && containers.length > 0 && (
+          <ContainerFilters
+            containers={containers}
+            view={view}
+            shown={visibleContainers(containers, view).length}
+            onChange={setView}
+            onSelectShown={() => setSelected(new Set(visibleContainers(containers, view).map((c) => c.id)))}
+          />
+        )}
+        {tab === "containers" && !(!containers && ctrErr) && <ContainersTab hostId={id} host={host} containers={containers} view={view} selected={selected} setSelected={setSelected} />}
         {tab === "stacks" && !(!stacks && stacksErr) && <StacksTab hostId={id} stacks={stacks} />}
         {tab === "storage" && !((!images && imagesErr) || (!volumes && volumesErr)) && <StorageTab hostId={id} host={host} images={images} volumes={volumes} />}
         {tab === "networks" && !(!networks && networksErr) && <NetworksTab hostId={id} networks={networks} />}
@@ -211,4 +243,16 @@ function tabError(tab: Tab, errs: Record<Tab, Error | false | undefined>, base: 
       </button>
     </EmptyState>
   );
+}
+
+/** Text filter with local state so typing isn't slowed by URL updates. */
+function FilterInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [v, setV] = useState(value);
+  useEffect(() => setV(value), [value]);
+  useEffect(() => {
+    if (v === value) return;
+    const t = setTimeout(() => onChange(v), 250);
+    return () => clearTimeout(t);
+  }, [v]); // eslint-disable-line react-hooks/exhaustive-deps
+  return <input className="filter-input" placeholder="Filter…" value={v} onChange={(e) => setV(e.target.value)} />;
 }

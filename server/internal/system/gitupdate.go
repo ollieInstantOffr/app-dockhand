@@ -194,6 +194,8 @@ func (s *Service) startGit(ctx context.Context, actor string) (string, error) {
 				"apk add --no-cache git su-exec >/dev/null",
 				"cd " + dir,
 				`OWNER=$(stat -c %u:%g .)`,
+				// Repair objects left root-owned by an earlier `sudo git …`, which git can't write next to.
+				`chown -R "$OWNER" .git`,
 				`echo "==> fetching ` + branch + `"`,
 				git + " fetch " + shellQuote(fetchURL) + " " + shellQuote(branch),
 				git + " merge --ff-only FETCH_HEAD",
