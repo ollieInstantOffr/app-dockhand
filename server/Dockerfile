@@ -5,7 +5,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-ARG DOCKHAND_VERSION=1.0.0
+ARG DOCKHAND_VERSION=1.0.1
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
       -ldflags "-s -w -X main.version=${DOCKHAND_VERSION}" \
       -o /out/dockhand ./cmd/dockhand
