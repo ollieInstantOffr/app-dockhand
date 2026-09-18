@@ -180,7 +180,7 @@ don't finish in time are skipped rather than failing the request.
 | DELETE | `/api/notifications/channels/:id` | – | `{}` |
 | POST | `/api/notifications/channels/:id/test` | – | `{ok, error}` |
 
-Channel config keys — email: `host, port, username, password, from, to`; slack/discord/webhook: `url`; ntfy: `url, topic, token`.
+Channel config keys — email: `host, port, username, password, from, to`; slack/webhook: `url`; ntfy: `url, topic, token`.
 
 ## Settings, MCP, system
 

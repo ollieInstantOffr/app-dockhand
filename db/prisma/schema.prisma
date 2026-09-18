@@ -285,7 +285,7 @@ model Alert {
 
 model NotificationChannel {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  type      String // email | slack | discord | ntfy | webhook
+  type      String // email | slack | ntfy | webhook
   name      String
   config    Json     @default("{}")
   enabled   Boolean  @default(true)

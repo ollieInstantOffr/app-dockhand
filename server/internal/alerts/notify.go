@@ -41,7 +41,6 @@ type Channel struct {
 var channelTypes = map[string][]string{
 	"email":   {"host", "port", "username", "password", "from", "to"},
 	"slack":   {"url"},
-	"discord": {"url"},
 	"webhook": {"url"},
 	"ntfy":    {"url", "topic", "token"},
 }
@@ -54,7 +53,7 @@ func isSecret(typ, key string) bool {
 		return true
 	}
 	// Incoming-webhook URLs embed their credential.
-	return key == "url" && (typ == "slack" || typ == "discord" || typ == "webhook")
+	return key == "url" && (typ == "slack" || typ == "webhook")
 }
 
 const maskPrefix = "••••"
@@ -160,7 +159,7 @@ type ChannelInput struct {
 func validateChannel(c *Channel) error {
 	keys, ok := channelTypes[c.Type]
 	if !ok {
-		return errors.New("type must be email, slack, discord, ntfy or webhook")
+		return errors.New("type must be email, slack, ntfy or webhook")
 	}
 	if strings.TrimSpace(c.Name) == "" {
 		c.Name = c.Type
@@ -282,8 +281,6 @@ func Send(ctx context.Context, c Channel, m Message) error {
 	switch c.Type {
 	case "slack":
 		return postJSON(ctx, c.Config["url"], map[string]any{"text": "*" + head + "*\n" + body}, nil)
-	case "discord":
-		return postJSON(ctx, c.Config["url"], map[string]any{"content": "**" + head + "**\n" + body, "username": "Dockhand"}, nil)
 	case "webhook":
 		return postJSON(ctx, c.Config["url"], m, nil)
 	case "ntfy":

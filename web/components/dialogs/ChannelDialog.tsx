@@ -20,7 +20,6 @@ const FIELDS: Record<CType, Def[]> = {
     { key: "to", label: "To", placeholder: "you@example.com", half: true },
   ],
   slack: [{ key: "url", label: "Incoming webhook URL", placeholder: "https://hooks.slack.com/services/…", mono: true, secret: true }],
-  discord: [{ key: "url", label: "Webhook URL", placeholder: "https://discord.com/api/webhooks/…", mono: true, secret: true }],
   ntfy: [
     { key: "url", label: "Server", placeholder: "https://ntfy.sh", mono: true, half: true },
     { key: "topic", label: "Topic", placeholder: "dockhand-alerts", mono: true, half: true },
@@ -30,11 +29,10 @@ const FIELDS: Record<CType, Def[]> = {
 };
 
 const DEFAULTS: Partial<Record<CType, Record<string, string>>> = { email: { port: "587" }, ntfy: { url: "https://ntfy.sh" } };
-const LABEL: Record<CType, string> = { email: "Email", slack: "Slack", discord: "Discord", ntfy: "ntfy", webhook: "Webhook" };
+const LABEL: Record<CType, string> = { email: "Email", slack: "Slack", ntfy: "ntfy", webhook: "Webhook" };
 const HINT: Record<CType, string> = {
   email: "Sent over SMTP with STARTTLS when the server offers it.",
   slack: "Create an Incoming Webhook in your Slack workspace and paste its URL.",
-  discord: "Channel settings → Integrations → Webhooks → New webhook → Copy URL.",
   ntfy: "Subscribe to the same topic in the ntfy app to get push notifications.",
   webhook: "Dockhand POSTs a JSON body {title, text, severity, host, url} to this URL.",
 };

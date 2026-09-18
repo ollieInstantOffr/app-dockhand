@@ -74,7 +74,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       { id: "nav-settings", group: "Navigation", label: "Settings", sub: "Hosts", icon: "settings", hint: ["G", "S"], run: go("/settings/hosts") },
       { id: "nav-github", group: "Navigation", label: "Settings · GitHub", keywords: "git accounts repos", icon: "branch", run: go("/settings/github"), searchOnly: true },
       { id: "nav-mcp", group: "Navigation", label: "Settings · MCP", keywords: "api keys claude ai", icon: "mcp", run: go("/settings/mcp"), searchOnly: true },
-      { id: "nav-notif", group: "Navigation", label: "Settings · Notifications", keywords: "channels email slack discord ntfy webhook", icon: "mail", run: go("/settings/notifications"), searchOnly: true },
+      { id: "nav-notif", group: "Navigation", label: "Settings · Notifications", keywords: "channels email slack ntfy webhook", icon: "mail", run: go("/settings/notifications"), searchOnly: true },
       { id: "nav-updates", group: "Navigation", label: "Settings · Updates", keywords: "self update version", icon: "update", run: go("/settings/updates"), searchOnly: true },
       { id: "nav-account", group: "Navigation", label: "Settings · Account", keywords: "password profile sessions", icon: "user", run: go("/settings/account"), searchOnly: true },
     ];

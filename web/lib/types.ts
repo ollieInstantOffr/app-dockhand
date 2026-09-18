@@ -481,7 +481,7 @@ export interface Alert {
 
 export interface NotificationChannel {
   id: ID;
-  type: "email" | "slack" | "discord" | "ntfy" | "webhook";
+  type: "email" | "slack" | "ntfy" | "webhook";
   name: string;
   config: Record<string, string>; // secrets are returned masked
   enabled: boolean;

@@ -22,7 +22,6 @@ const PREFS: { key: keyof Settings["notifications"]; label: string; sub: string 
 const TYPES: { type: NotificationChannel["type"]; label: string; icon: IconName; sub: string }[] = [
   { type: "email", label: "Email", icon: "mail", sub: "SMTP — any provider" },
   { type: "slack", label: "Slack", icon: "chat", sub: "Incoming webhook" },
-  { type: "discord", label: "Discord", icon: "chat", sub: "Channel webhook" },
   { type: "ntfy", label: "ntfy", icon: "bell", sub: "Push to your phone" },
   { type: "webhook", label: "Webhook", icon: "webhook", sub: "POST JSON anywhere" },
 ];
