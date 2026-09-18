@@ -114,7 +114,7 @@ function HostView() {
       else if (cParam) shell.openTerminal({ kind: "logs", hostId: id, containerId: cParam, name: cParam });
     } else if (c || cParam) {
       shell.openTerminal({ kind: "exec", hostId: id, containerId: c?.id ?? cParam!, name: c?.name ?? cParam! });
-    } else if (host.method !== "local") {
+    } else {
       shell.openTerminal({ kind: "shell", hostId: id });
     }
     goTab("containers");

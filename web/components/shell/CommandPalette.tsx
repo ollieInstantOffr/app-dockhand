@@ -80,7 +80,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     ];
     for (const h of hosts ?? []) {
       list.push({ id: `host-${h.id}`, group: "Hosts", label: h.name, sub: `${h.address}${h.os ? ` · ${h.os}` : ""}`, keywords: h.status, avatar: { name: h.name, color: h.color, dot: hostStatusColor(h.status) }, run: go(`/hosts/${h.id}`) });
-      if (h.method !== "local") list.push({ id: `ssh-${h.id}`, group: "Hosts", label: `Open SSH on ${h.name}`, sub: `${h.user}@${h.address}`, keywords: "shell terminal ssh console", icon: "terminal", run: () => shell.openTerminal({ kind: "shell", hostId: h.id }), searchOnly: true });
+      list.push({ id: `ssh-${h.id}`, group: "Hosts", label: `Open SSH on ${h.name}`, sub: `${h.user}@${h.address}`, keywords: "shell terminal ssh console", icon: "terminal", run: () => shell.openTerminal({ kind: "shell", hostId: h.id }), searchOnly: true });
     }
     for (const c of containers ?? []) {
       list.push({

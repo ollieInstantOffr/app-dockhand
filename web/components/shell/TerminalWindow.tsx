@@ -241,7 +241,7 @@ export function TerminalWindow({ requests, onClose }: { requests: { target: Term
 
   const label = (t: TerminalTarget): string => {
     const h = hostById.get(t.hostId);
-    if (t.kind === "shell") return h ? `${h.user || "root"}@${h.name}` : "host shell";
+    if (t.kind === "shell") return h ? `${h.method === "local" ? "root" : h.user || "root"}@${h.name}` : "host shell";
     const name = t.name ?? ctrById.get(`${t.hostId}/${t.containerId}`)?.name ?? t.containerId.slice(0, 12);
     return t.kind === "logs" ? `${name} · logs` : name;
   };
@@ -249,7 +249,7 @@ export function TerminalWindow({ requests, onClose }: { requests: { target: Term
   const meta = (t: TerminalTarget): string => {
     const h = hostById.get(t.hostId);
     const name = t.kind === "shell" ? "" : t.name ?? ctrById.get(`${t.hostId}/${t.containerId}`)?.name ?? t.containerId.slice(0, 12);
-    if (t.kind === "shell") return h ? `ssh ${h.user || "root"}@${h.address}${h.port && h.port !== 22 ? ` -p ${h.port}` : ""}` : "ssh";
+    if (t.kind === "shell") return h ? (h.method === "local" ? "nsenter -t 1 (host shell)" : `ssh ${h.user || "root"}@${h.address}${h.port && h.port !== 22 ? ` -p ${h.port}` : ""}`) : "ssh";
     const on = h ? ` · ${h.name}` : "";
     return t.kind === "exec" ? `docker exec -it ${name} bash${on}` : `docker logs -f ${name}${on}`;
   };
@@ -288,7 +288,7 @@ export function TerminalWindow({ requests, onClose }: { requests: { target: Term
     m.forEach((arr) => arr.sort((a, b) => a.name.localeCompare(b.name)));
     return m;
   }, [containers, hostById]);
-  const sshHosts = (hosts ?? []).filter((h) => h.method !== "local" && h.status !== "offline" && h.status !== "pending");
+  const sshHosts = (hosts ?? []).filter((h) => h.status !== "offline" && h.status !== "pending");
   const multiHost = (hosts ?? []).length > 1;
 
   const onKeyDown = (e: React.KeyboardEvent) => {

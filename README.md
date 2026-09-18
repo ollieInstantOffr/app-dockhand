@@ -55,6 +55,10 @@ Add a host with its address and SSH user, then append Dockhand's public key (Set
 `~/.ssh/authorized_keys` on it. The SSH user must be able to run `docker` without sudo. Host keys are pinned
 on first connect. Password auth and the local Docker socket are also supported.
 
+**Open SSH** on a host page opens a login shell on the host; its menu also lists a shell into every running
+container. For the local host (Docker socket, no SSH) the host shell runs as root through a short-lived
+privileged `alpine` helper that `nsenter`s the host's namespaces.
+
 Compose stacks created through Dockhand live in `/opt/dockhand/stacks/<name>` on each host; `docker compose`
 must be installed there. Deploys from GitHub stream the repository tarball through Dockhand, so hosts need
 neither git nor your token.

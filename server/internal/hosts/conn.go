@@ -247,7 +247,7 @@ func (t *sshTerm) Wait() int                   { <-t.done; return t.code }
 // Shell opens an interactive login shell with a PTY.
 func (c *Conn) Shell(ctx context.Context, cols, rows int) (Terminal, error) {
 	if c.Local() {
-		return nil, ErrNoShell
+		return c.localShell(ctx, cols, rows)
 	}
 	c.touch()
 	sess, err := c.ssh.NewSession()

@@ -98,8 +98,8 @@ export function HostHeader({ host, containers }: { host: Host | undefined; conta
   ];
 
   return (
-    <div style={CARD}>
-      <div className="ink-head" style={{ gap: 14, padding: "16px 18px 16px 20px", flexWrap: "wrap" }}>
+    <div style={{ ...CARD, overflow: "visible", position: "relative", zIndex: 5 }}>
+      <div className="ink-head" style={{ gap: 14, padding: "16px 18px 16px 20px", flexWrap: "wrap", borderRadius: "26px 26px 0 0" }}>
         <span style={{ width: 44, height: 44, borderRadius: 14, background: avatarBg(host.color), color: "#fff", display: "grid", placeItems: "center", fontSize: 17, fontWeight: 700, flex: "none", boxShadow: "0 0 0 2px rgba(255,255,255,.14)" }}>{initial(host.name)}</span>
         <span style={{ display: "flex", flexDirection: "column", minWidth: 0, gap: 3, flex: 1 }}>
           <span style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -108,17 +108,7 @@ export function HostHeader({ host, containers }: { host: Host | undefined; conta
           </span>
           <span className="mono ellipsis" style={{ fontSize: 11.5, opacity: 0.6 }}>{meta}</span>
         </span>
-        {local ? <LocalShellButton host={host} containers={containers} /> : (
-          <button
-            onClick={() => shell.openTerminal({ kind: "shell", hostId: host.id })}
-            disabled={offline}
-            title={offline ? "Host is offline" : `ssh ${host.user}@${host.address}`}
-            style={{ height: 36, padding: "0 14px", borderRadius: 12, border: 0, background: "var(--btn-ink)", color: "var(--btn)", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap", flex: "none" }}
-          >
-            <Icon name="terminal" size={15} strokeWidth={2.2} />
-            Open SSH
-          </button>
-        )}
+        <ShellButton host={host} containers={containers} offline={offline} />
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 20, padding: "16px 20px", flexWrap: "wrap" }}>
         <span style={{ display: "flex", alignItems: "flex-end", gap: 10, flex: 1, minWidth: 200 }}>
@@ -155,28 +145,50 @@ export function HostHeader({ host, containers }: { host: Host | undefined; conta
   );
 }
 
-/** Local-socket hosts have no SSH login: offer a shell inside one of their running containers. */
-function LocalShellButton({ host, containers }: { host: Host; containers: Container[] | undefined }) {
+/**
+ * "Open SSH": opens a root/login shell on the host itself (SSH for remote hosts,
+ * an nsenter helper for the local one). The chevron lists the host shell and
+ * every running container.
+ */
+function ShellButton({ host, containers, offline }: { host: Host; containers: Container[] | undefined; offline: boolean }) {
   const { openTerminal } = useShell();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
   useOutside(ref, () => setOpen(false), open);
   const running = (containers ?? []).filter((c) => c.state === "running").sort((a, b) => a.name.localeCompare(b.name));
+  const local = host.method === "local";
+  const hostTitle = local ? "Root shell on the Docker host (via nsenter)" : `ssh ${host.user}@${host.address}`;
+  const openHost = () => {
+    setOpen(false);
+    openTerminal({ kind: "shell", hostId: host.id });
+  };
+  const seg: React.CSSProperties = { height: 36, border: 0, background: "var(--btn-ink)", color: "var(--btn)", fontSize: 13, fontWeight: 700, cursor: offline ? "default" : "pointer", display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap", opacity: offline ? 0.6 : 1 };
   return (
-    <span ref={ref} style={{ position: "relative", display: "flex", flex: "none" }}>
-      <button onClick={() => setOpen(!open)} title="Local Docker has no SSH login — open a shell in a container" style={{ height: 36, padding: "0 14px", borderRadius: 12, border: 0, background: "var(--btn-ink)", color: "var(--btn)", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
+    <span ref={ref} style={{ position: "relative", display: "flex", flex: "none", gap: 1 }}>
+      <button onClick={openHost} disabled={offline} title={offline ? "Host is offline" : hostTitle} style={{ ...seg, padding: "0 12px 0 14px", borderRadius: "12px 0 0 12px" }}>
         <Icon name="terminal" size={15} strokeWidth={2.2} />
-        Open shell
+        Open SSH
+      </button>
+      <button onClick={() => setOpen(!open)} disabled={offline} aria-label="Choose a shell" aria-haspopup="menu" aria-expanded={open} style={{ ...seg, padding: "0 10px", borderRadius: "0 12px 12px 0" }}>
         <Icon name="chevron" size={13} />
       </button>
       {open && (
-        <div className="menu" style={{ right: 0, top: 42, minWidth: 240, maxHeight: 320, overflow: "auto", color: "var(--ink)" }}>
-          <span className="section-label" style={{ padding: "6px 10px 4px" }}>Shell into container</span>
+        <div className="menu" role="menu" style={{ right: 0, top: 42, minWidth: 260, maxHeight: 360, overflow: "auto", color: "var(--ink)" }}>
+          <span className="section-label" style={{ padding: "6px 10px 4px" }}>Host</span>
+          <button className="menu-item" role="menuitem" style={{ flex: "none" }} onClick={openHost}>
+            <Icon name="server" size={15} />
+            <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+              <span>Host shell</span>
+              <span className="mono ellipsis" style={{ fontSize: 11, fontWeight: 400, color: "var(--ink-3)" }}>{local ? "root on this machine" : `${host.user}@${host.address}`}</span>
+            </span>
+          </button>
+          <span className="section-label" style={{ padding: "10px 10px 4px" }}>Containers</span>
           {running.length === 0 && <span style={{ padding: "6px 10px 8px", fontSize: 12.5, color: "var(--ink-3)" }}>No running containers on {host.name}</span>}
           {running.map((c) => (
             <button
               key={c.id}
               className="menu-item mono"
+              role="menuitem"
               style={{ flex: "none" }}
               onClick={() => {
                 setOpen(false);
