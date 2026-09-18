@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Tabs } from "@/components/ui";
 import { Icon } from "@/components/icons";
@@ -34,8 +34,19 @@ function Deploy() {
   const pathname = usePathname();
   const q = params.get("mode");
   const [mode, setMode] = useState<Mode>(q === "image" || q === "compose" ? q : "git");
-  const [host] = useState(params.get("host") ?? "");
+  const hostParam = params.get("host") ?? "";
+  const [host, setHost] = useState(hostParam);
   const [nonce, setNonce] = useState(0);
+  // Arriving again with a different ?mode / ?host (e.g. from the "+" menu while already here) restarts the flow.
+  const lastParams = useRef(`${q}|${hostParam}`);
+  useEffect(() => {
+    const key = `${q}|${hostParam}`;
+    if (key === lastParams.current) return;
+    lastParams.current = key;
+    if (q === "image" || q === "compose" || q === "git") setMode(q);
+    setHost(hostParam);
+    setNonce((n) => n + 1);
+  }, [q, hostParam]);
   const accounts = useApi<GitAccount[]>("/api/github/accounts");
   const acct = accounts.data?.find((a) => a.enabled) ?? accounts.data?.[0];
   const others = (accounts.data?.length ?? 0) - 1;
@@ -47,6 +58,7 @@ function Deploy() {
     setMode(m);
     const sp = new URLSearchParams(params.toString());
     sp.set("mode", m);
+    lastParams.current = `${m}|${hostParam}`; // our own URL change — don't restart twice
     router.replace(`${pathname}?${sp.toString()}`, { scroll: false });
   };
 

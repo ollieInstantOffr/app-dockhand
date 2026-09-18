@@ -9,6 +9,7 @@ import { applyTheme, isDark, storedTheme } from "@/lib/theme";
 import { avatarBg, hostStatusColor, initial } from "@/lib/format";
 import type { Host, Overview, Theme, User } from "@/lib/types";
 import { ContainerSidecar } from "../sidecar/ContainerSidecar";
+import { useOutside } from "../ui";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsDialog, useGlobalShortcuts } from "./Shortcuts";
 import { NotificationsDrawer } from "./NotificationsDrawer";
@@ -155,7 +156,14 @@ function Dock({ mobile }: { mobile: boolean }) {
   const [hoverHost, setHoverHost] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [fly, setFly] = useState<Fly | null>(null);
+  const [createAt, setCreateAt] = useState<DOMRect | null>(null);
   const list = hosts ?? [];
+  const openCreate = (e: React.MouseEvent) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setFly(null);
+    setCreateAt((cur) => (cur ? null : r));
+  };
+  const createMenu = createAt && <CreateMenu anchor={createAt} mobile={mobile} hosts={list} onClose={() => setCreateAt(null)} />;
   const activeIdx = MAIN.findIndex((d) => d.match(pathname));
   const indIdx = hoverIdx ?? activeIdx;
   const unread = overview?.unreadAlerts ?? 0;
@@ -190,11 +198,12 @@ function Dock({ mobile }: { mobile: boolean }) {
             <HostAvatar h={h} glow={pathname === `/hosts/${h.id}`} />
           </button>
         ))}
-        <button onClick={() => openDialog({ type: "host" })} title="Add host" aria-label="Add host" style={{ width: 44, height: 44, border: 0, borderRadius: 16, background: "transparent", display: "grid", placeItems: "center", cursor: "pointer", color: "var(--btn-ink)", opacity: 0.6, flex: "none" }}>
+        <button onClick={openCreate} title="Add or deploy" aria-label="Add or deploy" aria-haspopup="menu" aria-expanded={!!createAt} style={{ width: 44, height: 44, border: 0, borderRadius: 16, background: "transparent", display: "grid", placeItems: "center", cursor: "pointer", color: "var(--btn-ink)", opacity: 0.6, flex: "none" }}>
           <span style={{ width: 28, height: 28, borderRadius: 9, border: "1.5px dashed currentColor", display: "grid", placeItems: "center" }}>
             <Icon name="plus" size={14} />
           </span>
         </button>
+        {createMenu}
       </nav>
     );
   }
@@ -274,11 +283,13 @@ function Dock({ mobile }: { mobile: boolean }) {
           )}
         </div>
         <button
-          onClick={() => openDialog({ type: "host" })}
-          onMouseEnter={(e) => showFly(e, { label: "Add host" })}
-          aria-label="Add host"
+          onClick={openCreate}
+          onMouseEnter={(e) => !createAt && showFly(e, { label: "Add or deploy", sub: "host · container · stack" })}
+          aria-label="Add or deploy"
+          aria-haspopup="menu"
+          aria-expanded={!!createAt}
           className="spine-add"
-          style={{ width: 48, height: 44, border: 0, borderRadius: 15, background: "transparent", display: "grid", placeItems: "center", cursor: "pointer", color: "var(--btn-ink)", opacity: 0.6, flex: "none", marginTop: 4 }}
+          style={{ width: 48, height: 44, border: 0, borderRadius: 15, background: createAt ? "rgba(127,127,127,.22)" : "transparent", display: "grid", placeItems: "center", cursor: "pointer", color: "var(--btn-ink)", opacity: createAt ? 1 : 0.6, flex: "none", marginTop: 4 }}
         >
           <span style={{ width: 28, height: 28, borderRadius: 9, border: "1.5px dashed currentColor", display: "grid", placeItems: "center" }}>
             <Icon name="plus" size={14} />
@@ -286,6 +297,7 @@ function Dock({ mobile }: { mobile: boolean }) {
         </button>
         <style>{`.spine-btn:hover{background:rgba(127,127,127,.18)!important}.spine-dim:hover{opacity:1!important}.spine-add:hover{opacity:1!important;background:rgba(127,127,127,.18)!important}`}</style>
       </nav>
+      {createMenu}
       {fly && (
         <div style={{ position: "fixed", left: 82, top: fly.top, transform: "translateY(-50%)", zIndex: 51, pointerEvents: "none", display: "flex", alignItems: "center", gap: 10, height: 40, padding: "0 14px 0 12px", borderRadius: 14, background: "var(--btn)", color: "var(--btn-ink)", boxShadow: "0 14px 40px rgba(10,14,24,.3)", whiteSpace: "nowrap", animation: "flyIn .25s cubic-bezier(.34,1.5,.44,1) both", transition: "top .28s cubic-bezier(.34,1.4,.44,1)" }}>
           <span style={{ position: "absolute", left: -5, top: "50%", width: 10, height: 10, background: "var(--btn)", transform: "translateY(-50%) rotate(45deg)", borderRadius: 2 }} />
@@ -298,6 +310,62 @@ function Dock({ mobile }: { mobile: boolean }) {
         </div>
       )}
     </>
+  );
+}
+
+// ─── "+" create menu ──────────────────────────────────────────────────────
+
+/** The spine's "+": add a host, or deploy a container / GitHub repo / compose stack. */
+function CreateMenu({ anchor, mobile, hosts, onClose }: { anchor: DOMRect; mobile: boolean; hosts: Host[]; onClose: () => void }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const { openDialog } = useShell();
+  const ref = useRef<HTMLDivElement>(null);
+  useOutside(ref, onClose);
+  // On a host page, deploy targets that host; otherwise the deploy page picks one.
+  const hostId = pathname.match(/^\/hosts\/([^/?#]+)/)?.[1];
+  const host = hosts.find((h) => h.id === hostId);
+  const q = host ? `&host=${host.id}` : "";
+  const go = (href: string) => {
+    onClose();
+    router.push(href);
+  };
+  const noHosts = hosts.length === 0;
+  const items: { icon: IconName; label: string; sub: string; run: () => void; disabled?: boolean }[] = [
+    { icon: "box", label: "Run a container", sub: host ? `From an image, on ${host.name}` : "From Docker Hub, GHCR or any registry", run: () => go(`/deploy?mode=image${q}`), disabled: noHosts },
+    { icon: "branch", label: "Deploy from GitHub", sub: "A repo with a compose file", run: () => go(`/deploy?mode=git${q}`), disabled: noHosts },
+    { icon: "layers", label: "New compose stack", sub: "Write or paste a docker-compose.yml", run: () => go(`/deploy?mode=compose${q}`), disabled: noHosts },
+  ];
+  const pos: React.CSSProperties = mobile
+    ? { left: Math.max(12, Math.min(anchor.left + anchor.width / 2 - 150, window.innerWidth - 312)), bottom: window.innerHeight - anchor.top + 10 }
+    : { left: 82, bottom: Math.max(12, window.innerHeight - anchor.bottom) };
+  return (
+    <div ref={ref} role="menu" aria-label="Add or deploy" style={{ position: "fixed", ...pos, zIndex: 60, width: 300, padding: 6, borderRadius: 18, background: "var(--btn)", color: "var(--btn-ink)", boxShadow: "0 24px 60px rgba(10,14,24,.4), inset 0 1px 0 rgba(255,255,255,.1)", display: "flex", flexDirection: "column", gap: 2, animation: "pop .18s cubic-bezier(.2,.8,.2,1) both" }}>
+      <div style={{ padding: "8px 10px 6px", fontSize: 10.5, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", opacity: 0.55 }}>
+        Deploy{host ? ` to ${host.name}` : ""}
+      </div>
+      {items.map((it) => (
+        <MenuRow key={it.label} {...it} />
+      ))}
+      <span style={{ height: 1, background: "rgba(127,127,127,.3)", margin: "4px 8px" }} />
+      <MenuRow icon="server" label="Add host" sub="Connect a machine running Docker" run={() => { onClose(); openDialog({ type: "host" }); }} />
+      {noHosts && <div style={{ padding: "4px 10px 8px", fontSize: 11.5, opacity: 0.6 }}>Add a host first to deploy containers.</div>}
+      <style>{`.cm-row:hover:not(:disabled){background:rgba(127,127,127,.2)}`}</style>
+    </div>
+  );
+}
+
+function MenuRow({ icon, label, sub, run, disabled }: { icon: IconName; label: string; sub: string; run: () => void; disabled?: boolean }) {
+  return (
+    <button type="button" role="menuitem" className="cm-row" disabled={disabled} onClick={run} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 10px", border: 0, borderRadius: 12, background: "transparent", color: "inherit", cursor: disabled ? "default" : "pointer", textAlign: "left", width: "100%", opacity: disabled ? 0.45 : 1 }}>
+      <span style={{ width: 32, height: 32, borderRadius: 10, background: "rgba(127,127,127,.22)", display: "grid", placeItems: "center", flex: "none" }}>
+        <Icon name={icon} size={16} />
+      </span>
+      <span style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+        <span style={{ fontSize: 13.5, fontWeight: 700 }}>{label}</span>
+        <span className="ellipsis" style={{ fontSize: 11.5, opacity: 0.6 }}>{sub}</span>
+      </span>
+    </button>
   );
 }
 
