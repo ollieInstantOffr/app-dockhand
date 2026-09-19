@@ -50,6 +50,12 @@ type Service struct {
 	gitRemote *remoteHead
 	gitErr    string
 	bootSHA   string // checkout HEAD when this API process started = the commit it was built from
+
+	// automatic updates (see auto.go)
+	autoAt     *time.Time
+	autoResult string
+	// OnAutoUpdate is called when an automatic update starts (target version, job id).
+	OnAutoUpdate func(target, jobID string)
 }
 
 type release struct {
@@ -100,7 +106,7 @@ func (s *Service) Info(ctx context.Context, force bool) (model.SystemInfo, error
 	up := s.settings.Get().Updates
 	info := model.SystemInfo{Version: s.cfg.Version, Notes: []string{}, CanSelfUpdate: CanSelfUpdate(),
 		Source:  model.SystemSource{Repo: up.Repo, Branch: channelBranch(up.Channel), SHA: os.Getenv("DOCKHAND_COMMIT"), Path: up.ComposeFile},
-		History: []model.UpdateHistory{}}
+		History: []model.UpdateHistory{}, Auto: s.AutoStatus()}
 	if gi, ok := s.gitInfo(ctx, force); ok {
 		info.Latest = gi.latest
 		info.UpdateAvailable = gi.available

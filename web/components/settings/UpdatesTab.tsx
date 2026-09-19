@@ -9,7 +9,7 @@ import { C, ago, shortSha } from "@/lib/format";
 import type { JobRef, Settings, SystemInfo, UpdateHistoryPage, UpdaterStatus } from "@/lib/types";
 import { InkButton, InkHead, PILL, SetToggle, StatusPill, cardStyle, colStack, rowStyle, twoCol, useSettings } from "./common";
 
-const WINDOWS = ["Sun 03:00–05:00", "Daily 04:00–05:00", "Sat 02:00–04:00", "Any time"];
+const WINDOWS = ["Sun 03:00–05:00", "Sat 02:00–04:00", "Daily 04:00–05:00", "Daily 03:00–04:00", "Weekdays 02:00–03:00", "Weekends 03:00–05:00", "Any time"];
 // Versions read "v1.4.0"; commits (git-mode updates) read as a short sha.
 const v = (s: string) => (!s ? "" : /^[0-9a-f]{7,40}$/.test(s) ? s.slice(0, 7) : `v${s.replace(/^v/, "")}`);
 
@@ -64,7 +64,7 @@ export function UpdatesTab() {
     <div style={twoCol(380)}>
       <div style={colStack}>
         <VersionCard sys={sys} job={job} jobKind={kind} checking={checking} onCheck={check} onUpdate={() => start("update")} onDismiss={() => setJobId(null)} />
-        <AutoCard />
+        <AutoCard sys={sys} />
       </div>
       <div style={colStack}>
         <SourceCard sys={sys} />
@@ -287,26 +287,101 @@ function UpdaterWatch({ target, onDismiss }: { target: string; onDismiss: () => 
   );
 }
 
-function AutoCard() {
+const browserZone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+};
+
+function zoneOptions(current: string): string[] {
+  let all: string[] = [];
+  try {
+    all = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.("timeZone") ?? [];
+  } catch {
+    /* old browser */
+  }
+  const first = [browserZone(), "UTC"];
+  if (current && !first.includes(current)) first.unshift(current);
+  return [...new Set([...first, ...all])];
+}
+
+function whenText(iso: string, tz: string): string {
+  const d = new Date(iso);
+  const opts: Intl.DateTimeFormatOptions = { weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false };
+  try {
+    return d.toLocaleString(undefined, { ...opts, timeZone: tz });
+  } catch {
+    return d.toLocaleString(undefined, opts);
+  }
+}
+
+function AutoCard({ sys }: { sys?: SystemInfo }) {
   const { settings, save } = useSettings();
   const u = settings?.updates;
   const saveU = (p: Partial<Settings["updates"]>) => save({ updates: p });
   const windows = u && !WINDOWS.includes(u.window) && u.window ? [u.window, ...WINDOWS] : WINDOWS;
+  const auto = sys?.auto;
+  const git = sys?.mode === "git";
+  const zone = u?.timezone || auto?.timezone || "";
+  const zones = zoneOptions(zone);
+  // Turning it on for the first time pins the window to this browser's zone.
+  const toggle = (on: boolean) => saveU(on && !u?.timezone ? { auto: on, timezone: browserZone() } : { auto: on });
+
+  let status: { tone: "ok" | "warn" | "info" | "muted"; text: string } | null = null;
+  if (u?.auto && auto) {
+    if (auto.error) status = { tone: "warn", text: auto.error };
+    else if (!sys?.canSelfUpdate) status = { tone: "warn", text: "Needs the Docker socket mounted into the API container." };
+    else if (auto.inWindow) status = { tone: "ok", text: "Inside the update window now — checking every 5 minutes." };
+    else if (auto.nextWindow) status = { tone: "info", text: `Next window opens ${whenText(auto.nextWindow, auto.timezone)} (${auto.timezone}).` };
+  }
+  const toneColor = { ok: C.ok, warn: C.warn, info: C.blue, muted: "var(--ink-3)" };
+
   return (
     <div className="glass-card" style={cardStyle(14)}>
       <div style={{ fontSize: 16, fontWeight: 700 }}>Automatic updates</div>
-      <SetToggle label="Update automatically" sub="Pull, build and recreate Dockhand inside the window" on={!!u?.auto} disabled={!u} onChange={(x) => saveU({ auto: x })} />
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
-        <div className="field">
-          Channel
-          <Seg<Settings["updates"]["channel"]> fit options={[{ value: "stable", label: "Stable" }, { value: "beta", label: "Beta" }, { value: "nightly", label: "Nightly" }]} value={u?.channel ?? "stable"} onChange={(x) => saveU({ channel: x })} />
+      <SetToggle label="Update automatically" sub={git ? "Pull new commits, rebuild and restart Dockhand inside the window" : "Install new releases and restart Dockhand inside the window"} on={!!u?.auto} disabled={!u} onChange={toggle} />
+      {status && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 12, background: "var(--fill-1)", fontSize: 12.5, fontWeight: 600 }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: toneColor[status.tone], flex: "none" }} />
+          <span>{status.text}</span>
         </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
         <div className="field">
           Window
           <Dropdown value={u?.window ?? ""} options={windows.map((w) => ({ value: w, label: w }))} onChange={(x) => saveU({ window: x })} />
         </div>
+        <label className="field">
+          Time zone
+          <select className="input" value={zone} disabled={!u} onChange={(e) => saveU({ timezone: e.target.value })} style={{ height: 40 }}>
+            {!zone && <option value="">Server time</option>}
+            {zones.map((z) => (
+              <option key={z} value={z}>
+                {z === browserZone() ? `${z} (this browser)` : z}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
+      {git ? (
+        <span className="field-hint">
+          Follows <span className="mono">{sys?.source.branch || "main"}</span> of <span className="mono">{sys?.source.repo}</span>. A version that fails to install is not retried automatically.
+        </span>
+      ) : (
+        <div className="field">
+          Channel
+          <Seg<Settings["updates"]["channel"]> fit options={[{ value: "stable", label: "Stable" }, { value: "beta", label: "Beta" }, { value: "nightly", label: "Nightly" }]} value={u?.channel ?? "stable"} onChange={(x) => saveU({ channel: x })} />
+        </div>
+      )}
       <SetToggle label="Back up before updating" sub="Snapshot of the Dockhand database and config" on={!!u?.backup} disabled={!u} onChange={(x) => saveU({ backup: x })} />
+      {u?.auto && auto?.lastCheck && (
+        <span style={{ fontSize: 12, color: "var(--ink-3)" }}>
+          Last automatic check {ago(auto.lastCheck)}
+          {auto.lastResult ? ` · ${auto.lastResult}` : ""}
+        </span>
+      )}
     </div>
   );
 }

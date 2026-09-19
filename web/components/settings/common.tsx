@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { errMsg, patch, useApi } from "@/lib/api";
+import { errMsg, invalidate, patch, useApi } from "@/lib/api";
 import type { Settings, SettingsPatch } from "@/lib/types";
 import { useShell } from "@/components/shell/context";
 import { Toggle } from "@/components/ui";
@@ -20,6 +20,7 @@ export function useSettings() {
     try {
       const s = await patch<Settings>("/api/settings", p);
       mutate(s, { revalidate: false });
+      if (p.updates) invalidate("/api/system"); // the automatic update schedule depends on these
       return true;
     } catch (e) {
       mutate(prev, { revalidate: false });

@@ -31,6 +31,10 @@ branch on GitHub; **Update** runs `git pull --ff-only` and `docker compose up -d
 so pushing to `main` is all it takes to ship a new version. Follow a running update with
 `docker logs -f $(docker ps -lq --filter label=dockhand.helper=self-update)`.
 
+With **Update automatically** on, Dockhand checks every five minutes while inside the update window (in the
+chosen time zone) and installs a new version the same way. A version that fails to install isn't retried
+automatically; the next newer one is.
+
 ## Architecture
 
 ```

@@ -53,6 +53,18 @@ func NewRunner(root context.Context, pool *db.DB) *Runner {
 	return &Runner{db: pool, root: root, active: map[string]*Job{}}
 }
 
+// Running reports whether a job of this kind is in progress.
+func (r *Runner) Running(kind string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, j := range r.active {
+		if j.spec.Kind == kind {
+			return true
+		}
+	}
+	return false
+}
+
 // OnFinish registers a hook called when any job finishes.
 func (r *Runner) OnFinish(h FinishHook) { r.hooks = append(r.hooks, h) }
 

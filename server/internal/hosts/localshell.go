@@ -61,6 +61,7 @@ func (c *Conn) localShell(ctx context.Context, cols, rows int) (Terminal, error)
 		_ = cli.ContainerRemove(context.Background(), created.ID, container.RemoveOptions{Force: true})
 		return nil, fmt.Errorf("host shell start: %w", err)
 	}
+	activeShells.Store(created.ID, struct{}{})
 	t := &helperTerm{cli: cli, id: created.ID, r: hj.Reader, w: hj.Conn, closer: hj.Conn}
 	_ = t.Resize(cols, rows)
 	return t, nil
@@ -98,6 +99,7 @@ func (t *helperTerm) Wait() int {
 // Close ends the session and removes the helper (AutoRemove covers normal exits).
 func (t *helperTerm) Close() error {
 	err := t.closer.Close()
+	activeShells.Delete(t.id)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = t.cli.ContainerRemove(ctx, t.id, container.RemoveOptions{Force: true})

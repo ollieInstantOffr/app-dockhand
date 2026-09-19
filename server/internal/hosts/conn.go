@@ -305,6 +305,7 @@ type Manager struct {
 	mu    sync.Mutex
 	conns map[string]*Conn
 	dials map[string]*dialCall
+	swept map[string]bool // hosts checked for leftover helper containers (see helpers.go)
 }
 
 type dialCall struct {
@@ -389,6 +390,7 @@ func (m *Manager) dial(ctx context.Context, hostID string) (*Conn, error) {
 			slog.Warn("pin host key", "host", t.Name, "err", err)
 		}
 	}
+	m.sweepOnce(c)
 	return c, nil
 }
 

@@ -576,6 +576,7 @@ export interface Settings {
     redeployOnPush: boolean;
     repo: string; // "dockhand-app/dockhand"
     composeFile: string;
+    timezone: string; // IANA zone the window is read in; "" = the server's zone
   };
   notifications: {
     hostDown: boolean;
@@ -626,6 +627,15 @@ export interface SystemInfo {
   mode?: "git" | "release";
   currentCommit?: string; // short sha the running stack was built from (git mode)
   checkError?: string; // why the last update check failed
+  auto?: {
+    enabled: boolean;
+    timezone: string; // zone the window is evaluated in
+    inWindow: boolean;
+    nextWindow: ISODate | null; // when the window next opens (now, if inside it)
+    lastCheck: ISODate | null;
+    lastResult: string; // "Up to date", "Started update to abc1234", "Failed: …"
+    error?: string; // the window can't be read
+  };
 }
 
 // ─── Overview (fleet page + palette) ───────────────────────────────────────

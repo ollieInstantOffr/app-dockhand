@@ -58,6 +58,8 @@ type Updates struct {
 	RedeployOnPush bool   `json:"redeployOnPush"`
 	Repo           string `json:"repo"`
 	ComposeFile    string `json:"composeFile"`
+	// Timezone (IANA name) the update window is read in; "" = the server's zone.
+	Timezone string `json:"timezone"`
 }
 
 type Notifications struct {
@@ -242,6 +244,9 @@ func (s *Store) GetRaw(ctx context.Context, key string, dst any) (bool, error) {
 // PutRaw writes an arbitrary settings row.
 func (s *Store) PutRaw(ctx context.Context, key string, v any) error { return s.save(ctx, key, v) }
 
+// ValidateWindow checks an update window like "Sun 03:00–05:00" (set by the system package).
+var ValidateWindow func(string) error
+
 func validate(s *Settings) error {
 	switch s.Uptime.IntervalSec {
 	case 30, 60, 300:
@@ -268,6 +273,17 @@ func validate(s *Settings) error {
 	case "pull", "build":
 	default:
 		return fmt.Errorf("updates.build must be pull or build")
+	}
+	s.Updates.Timezone = strings.TrimSpace(s.Updates.Timezone)
+	if s.Updates.Timezone != "" {
+		if _, err := time.LoadLocation(s.Updates.Timezone); err != nil {
+			return fmt.Errorf("updates.timezone: unknown time zone %q", s.Updates.Timezone)
+		}
+	}
+	if ValidateWindow != nil {
+		if err := ValidateWindow(s.Updates.Window); err != nil {
+			return fmt.Errorf("updates.window: %w", err)
+		}
 	}
 	s.General.PublicURL = strings.TrimRight(strings.TrimSpace(s.General.PublicURL), "/")
 	s.General.Domain = strings.TrimSpace(s.General.Domain)

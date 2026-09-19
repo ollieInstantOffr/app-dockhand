@@ -653,9 +653,21 @@ type SystemInfo struct {
 	History         []UpdateHistory `json:"history"`
 	// Mode is "git" when Dockhand runs from a git checkout (updates = new commits on
 	// its branch) and "release" otherwise (updates = GitHub releases).
-	Mode          string `json:"mode"`
-	CurrentCommit string `json:"currentCommit,omitempty"` // short sha the stack was built from (git mode)
-	CheckError    string `json:"checkError,omitempty"`    // why the last check failed, if it did
+	Mode          string           `json:"mode"`
+	CurrentCommit string           `json:"currentCommit,omitempty"` // short sha the stack was built from (git mode)
+	CheckError    string           `json:"checkError,omitempty"`    // why the last check failed, if it did
+	Auto          AutoUpdateStatus `json:"auto"`
+}
+
+// AutoUpdateStatus is the automatic update schedule.
+type AutoUpdateStatus struct {
+	Enabled    bool       `json:"enabled"`
+	Timezone   string     `json:"timezone"`
+	InWindow   bool       `json:"inWindow"`
+	NextWindow *time.Time `json:"nextWindow"`
+	LastCheck  *time.Time `json:"lastCheck"`
+	LastResult string     `json:"lastResult"`
+	Error      string     `json:"error,omitempty"` // the window can't be read
 }
 
 // ─── Overview ──────────────────────────────────────────────────────────────

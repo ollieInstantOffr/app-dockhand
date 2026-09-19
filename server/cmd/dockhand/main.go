@@ -228,6 +228,11 @@ func run(cfg *config.Config) error {
 	mcpProvider := mcptools.New(pool, st, hostStore, mon, ops, stackSvc, gitSvc, jobRunner)
 	sysSvc := system.New(cfg, pool, st, jobRunner)
 	sysSvc.RecordBoot(rootCtx)
+	sysSvc.OnAutoUpdate = func(target, jobID string) {
+		alertEngine.Event(context.Background(), alerts.Spec{Key: "auto_update:" + jobID, Severity: "info", Kind: "self_update",
+			Title: "Dockhand is updating itself to " + target, Text: "Automatic update inside the update window. Dockhand restarts in a minute or two.",
+			Action: "Open", Href: "/settings/updates", Pref: alerts.PrefUpdates})
+	}
 
 	// Alert on failed deploys / updates.
 	jobRunner.OnFinish(func(j model.Job, actor string) {
@@ -277,6 +282,7 @@ func run(cfg *config.Config) error {
 	go mon.Run(svcCtx)
 	go upSvc.Run(svcCtx)
 	go gitSvc.SyncLoop(svcCtx)
+	go sysSvc.RunAutoUpdates(svcCtx)
 	go mcpProvider.RunDedicated(svcCtx, mcp.NewHandler(mcpProvider, "dockhand", cfg.Version))
 	go housekeeping(svcCtx, authSvc, hostStore, conns, mon, upSvc, alertEngine, mcpProvider, jobRunner)
 
@@ -339,6 +345,7 @@ func housekeeping(ctx context.Context, a *auth.Service, hs *hosts.Store, conns *
 			conns.CloseIdle()
 		case <-hourly.C:
 			prune()
+			conns.SweepHelpers(ctx)
 		}
 	}
 }
