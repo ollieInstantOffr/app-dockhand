@@ -40,7 +40,7 @@ services:
     build:
       context: ./server
       args:
-        DOCKHAND_VERSION: ${DOCKHAND_VERSION:-1.0.3}
+        DOCKHAND_VERSION: ${DOCKHAND_VERSION:-1.0.4}
     restart: unless-stopped
     ports:
       # The only published port: UI, API, WebSockets, webhooks and MCP (/mcp) all share it.

@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { Icon, Logo } from "@/components/icons";
-import { Dropdown, LogBlock, ProgressList, Seg } from "@/components/ui";
+import { Dropdown, LogBlock, Seg } from "@/components/ui";
 import { useShell } from "@/components/shell/context";
 import { errMsg, invalidate, post, useApi, useJob } from "@/lib/api";
 import { C, ago, shortSha } from "@/lib/format";
-import type { JobRef, Settings, SystemInfo, UpdateHistoryPage, UpdaterStatus } from "@/lib/types";
+import type { JobLogLine, JobRef, Settings, SystemInfo, UpdateHistoryPage, UpdaterStatus } from "@/lib/types";
 import { InkButton, InkHead, PILL, SetToggle, StatusPill, cardStyle, colStack, rowStyle, twoCol, useSettings } from "./common";
 
 const WINDOWS = ["Sun 03:00–05:00", "Sat 02:00–04:00", "Daily 04:00–05:00", "Daily 03:00–04:00", "Weekdays 02:00–03:00", "Weekends 03:00–05:00", "Any time"];
@@ -76,7 +76,9 @@ export function UpdatesTab() {
 
 function VersionCard({ sys, job, jobKind, checking, onCheck, onUpdate, onDismiss }: { sys?: SystemInfo; job: ReturnType<typeof useJob>; jobKind: "update" | "rollback"; checking: boolean; onCheck: () => void; onUpdate: () => void; onDismiss: () => void }) {
   const busy = !!job;
-  const running = job?.status === "running";
+  // In git mode the job hands off to a detached updater; the update is still in progress after the job "succeeds".
+  const handedOff = job?.status === "success" && job.result?.handedOff === true && sys?.mode === "git";
+  const running = job?.status === "running" || handedOff;
   const pill = running ? { ...PILL.blue, label: jobKind === "update" ? "Updating" : "Rolling back" } : sys?.updateAvailable ? { ...PILL.warn, label: "Update available" } : { ...PILL.ok, label: "Up to date" };
   const status = !sys
     ? "Checking…"
@@ -169,9 +171,13 @@ function VersionCard({ sys, job, jobKind, checking, onCheck, onUpdate, onDismiss
 
       {job && (
         <>
-          <ProgressList steps={job.steps} />
-          <LogBlock lines={job.log} running={running} style={{ maxHeight: 220 }} />
-          {job.status === "success" && job.result?.handedOff === true && sys?.mode === "git" && <UpdaterWatch target={target} onDismiss={onDismiss} />}
+          {!(job.status === "success" && job.result?.handedOff === true && sys?.mode === "git") && (
+            <>
+              <JobProgress steps={job.steps} status={job.status} scale={job.result?.handedOff === true || (sys?.mode === "git" && jobKind === "update") ? HANDOFF_PCT : 100} />
+              <Details lines={job.log} running={running} open={job.status === "failed"} />
+            </>
+          )}
+          {job.status === "success" && job.result?.handedOff === true && sys?.mode === "git" && <UpdaterWatch target={target} jobLog={job.log} startedAt={job.startedAt} onDismiss={onDismiss} />}
           {job.status === "success" && !(job.result?.handedOff === true && sys?.mode === "git") && (
             <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 14, background: "rgba(34,160,107,.1)", border: "1px solid rgba(34,160,107,.3)", animation: "rise .3s ease both" }}>
               <span style={{ width: 28, height: 28, borderRadius: "50%", background: C.ok, color: "#fff", display: "grid", placeItems: "center", flex: "none" }}>
@@ -201,11 +207,15 @@ function VersionCard({ sys, job, jobKind, checking, onCheck, onUpdate, onDismiss
  * Follows the detached updater after the API hands off: shows its output, reports
  * failures, and reloads once the API is back on the new commit.
  */
-function UpdaterWatch({ target, onDismiss }: { target: string; onDismiss: () => void }) {
+function UpdaterWatch({ target, jobLog, startedAt, onDismiss }: { target: string; jobLog: JobLogLine[]; startedAt?: string; onDismiss: () => void }) {
   const [st, setSt] = useState<UpdaterStatus | null>(null);
   const [down, setDown] = useState(false);
   const [live, setLive] = useState<string>("");
-  const [started] = useState(() => Date.now());
+  // Elapsed time counts from the start of the whole update, not the hand-off.
+  const [started] = useState(() => {
+    const t = startedAt ? Date.parse(startedAt) : NaN;
+    return Number.isFinite(t) && t <= Date.now() ? t : Date.now();
+  });
   const [now, setNow] = useState(Date.now());
   const done = !!live && target && live.startsWith(target.slice(0, 7));
   const failed = st?.state === "failed";
@@ -246,44 +256,144 @@ function UpdaterWatch({ target, onDismiss }: { target: string; onDismiss: () => 
     return () => clearTimeout(t);
   }, [done]);
 
-  const phase = done
-    ? `Updated to ${target.slice(0, 7)} — reloading…`
-    : failed
-      ? `The update failed (exit ${st?.exitCode ?? "?"}) — Dockhand is still running the previous version.`
-      : down
-        ? "Dockhand is restarting on the new version…"
-        : st?.state === "succeeded"
-          ? "Rebuild finished — waiting for Dockhand to come back…"
-          : "Pulling and rebuilding Dockhand — this takes a minute or two…";
-  const tone = done ? { bg: "rgba(34,160,107,.1)", bd: "rgba(34,160,107,.3)", ink: "var(--ok-ink)" } : failed || slow ? { bg: "var(--crit-bg)", bd: "rgba(226,80,76,.3)", ink: "var(--crit-ink)" } : { bg: "rgba(47,111,237,.07)", bd: "rgba(47,111,237,.28)", ink: "var(--ink)" };
   const lines = (st?.log ?? []).map((text) => ({ text, level: (/error|fatal|failed|denied/i.test(text) ? "error" : text.startsWith("==>") ? "ok" : "info") as "error" | "ok" | "info" }));
+
+  // Where the updater is, read from its "==> …" markers and docker build's "[n/m]" step counters.
+  const log = st?.log ?? [];
+  const has = (m: string) => log.some((l) => l.startsWith(`==> ${m}`));
+  const [rebuildAt, setRebuildAt] = useState<number | null>(null);
+  const rebuilding = has("rebuilding") && !has("done");
+  useEffect(() => {
+    if (rebuilding && rebuildAt == null) setRebuildAt(Date.now());
+  }, [rebuilding, rebuildAt]);
+  let buildFrac = 0;
+  for (let i = log.length - 1; i >= 0; i--) {
+    const m = log[i].match(/\[[^\]]*?(\d+)\/(\d+)\]/);
+    if (m && Number(m[2]) > 0) {
+      buildFrac = Number(m[1]) / Number(m[2]);
+      break;
+    }
+  }
+  const timeFrac = rebuildAt ? 1 - Math.exp(-(now - rebuildAt) / 70_000) : 0; // most rebuilds take 1–2 minutes
+  const stages: { key: string; label: string; from: number; to: number }[] = [
+    { key: "prepare", label: "Starting the updater", from: HANDOFF_PCT, to: 26 },
+    { key: "fetch", label: "Fetching the new code", from: 26, to: 34 },
+    { key: "build", label: "Rebuilding Dockhand", from: 34, to: 84 },
+    { key: "restart", label: "Restarting on the new version", from: 84, to: 97 },
+    { key: "done", label: "Done", from: 100, to: 100 },
+  ];
+  const restarting = !done && (down || st?.state === "succeeded" || has("done"));
+  const [restartAt, setRestartAt] = useState<number | null>(null);
+  useEffect(() => {
+    if (restarting && restartAt == null) setRestartAt(Date.now());
+  }, [restarting, restartAt]);
+  const stageKey = done ? "done" : down || st?.state === "succeeded" || has("done") ? "restart" : has("rebuilding") ? "build" : has("fetching") || has("now at") ? "fetch" : "prepare";
+  const stage = stages.find((x) => x.key === stageKey)!;
+  const within = stageKey === "build" ? Math.max(buildFrac * 0.95, timeFrac * 0.9) : stageKey === "restart" ? (restartAt ? 1 - Math.exp(-(now - restartAt) / 25_000) : 0) : 0.5;
+  const raw = done ? 100 : stage.from + (stage.to - stage.from) * Math.min(1, within);
+  // Never move backwards (the updater log can reset while the API restarts).
+  const [peak, setPeak] = useState(HANDOFF_PCT);
+  useEffect(() => {
+    if (raw > peak) setPeak(raw);
+  }, [raw, peak]);
+  const pct = failed ? peak : Math.max(peak, raw);
+  const stepNo = stages.findIndex((x) => x.key === stageKey) + 3; // after "Backing up" and "Preparing"
+  const elapsed = Math.max(0, Math.round((now - started) / 1000));
+  const title = done ? `Updated to ${target.slice(0, 7)}` : failed ? "The update failed" : slow ? "This is taking longer than expected" : stage.label;
+  const sub = done
+    ? "Reloading…"
+    : failed
+      ? `Exit ${st?.exitCode ?? "?"} — Dockhand is still running the previous version.`
+      : `Step ${Math.min(stepNo, 6)} of 6 · ${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")} elapsed · usually about 2 minutes`;
   return (
     <>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 14, background: tone.bg, border: `1px solid ${tone.bd}`, animation: "rise .3s ease both" }}>
-        {done ? (
-          <span style={{ width: 28, height: 28, borderRadius: "50%", background: C.ok, color: "#fff", display: "grid", placeItems: "center", flex: "none" }}>
-            <Icon name="check" size={15} strokeWidth={2.6} />
-          </span>
-        ) : failed ? (
-          <span style={{ width: 28, height: 28, borderRadius: "50%", background: C.crit, color: "#fff", display: "grid", placeItems: "center", flex: "none" }}>
-            <Icon name="x" size={14} strokeWidth={2.6} />
-          </span>
-        ) : (
-          <span className="spinner" style={{ width: 18, height: 18, color: C.blue, flex: "none", margin: 5 }} />
-        )}
-        <span style={{ fontSize: 13.5, fontWeight: 700, color: tone.ink, flex: 1 }}>
-          {slow ? "This is taking longer than expected — check the updater output below." : phase}
-        </span>
+      <ProgressBar pct={pct} tone={done ? "ok" : failed || slow ? "crit" : "run"} title={title} sub={sub}>
         {done && <button type="button" className="btn" style={{ height: 34, padding: "0 14px", fontSize: 12.5 }} onClick={() => window.location.reload()}>Reload</button>}
         {(failed || slow) && <button type="button" className="btn2" onClick={onDismiss}>Dismiss</button>}
-      </div>
-      {lines.length > 0 && <LogBlock lines={lines} running={!done && !failed} style={{ maxHeight: 220 }} />}
-      {st?.id && (failed || slow) && (
-        <span style={{ fontSize: 12, color: "var(--ink-3)" }}>
-          Full output on the host: <code className="mono">docker logs {st.id}</code>
-        </span>
-      )}
+      </ProgressBar>
+      <Details lines={[...jobLog, ...lines]} running={!done && !failed} open={failed || slow}>
+        {st?.id && (failed || slow) && (
+          <span style={{ fontSize: 12, color: "var(--ink-3)" }}>
+            Full output on the host: <code className="mono">docker logs {st.id}</code>
+          </span>
+        )}
+      </Details>
     </>
+  );
+}
+
+/** Share of the bar covered by the API's own job before it hands off to the updater (git mode). */
+const HANDOFF_PCT = 20;
+
+/** Progress for the API-side job: its steps mapped onto 0–scale%. */
+function JobProgress({ steps, status, scale }: { steps: { label: string; status: string }[]; status: string; scale: number }) {
+  const total = Math.max(1, steps.length);
+  const done = steps.filter((x) => x.status === "done" || x.status === "skipped").length;
+  const cur = steps.find((x) => x.status === "running") ?? steps.find((x) => x.status === "failed");
+  const idx = cur ? steps.indexOf(cur) : done;
+  const pct = status === "success" ? scale : ((done + (cur?.status === "running" ? 0.5 : 0)) / total) * scale;
+  const failed = status === "failed";
+  const ofN = scale < 100 ? 6 : total;
+  return (
+    <ProgressBar
+      pct={Math.max(3, pct)}
+      tone={failed ? "crit" : status === "success" ? "ok" : "run"}
+      title={failed ? `Failed: ${cur?.label ?? "update"}` : status === "success" ? "Done" : cur?.label ?? "Starting…"}
+      sub={failed ? "Nothing was changed — Dockhand is still on the current version." : `Step ${Math.min(idx + 1, ofN)} of ${ofN}`}
+    />
+  );
+}
+
+function ProgressBar({ pct, tone, title, sub, children }: { pct: number; tone: "run" | "ok" | "crit"; title: string; sub?: string; children?: React.ReactNode }) {
+  const color = tone === "ok" ? C.ok : tone === "crit" ? C.crit : C.blue;
+  const p = Math.max(0, Math.min(100, pct));
+  return (
+    <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(p)} aria-label={title} style={{ display: "flex", flexDirection: "column", gap: 10, padding: "14px 16px", borderRadius: 16, background: "var(--fill-1)", animation: "rise .3s ease both" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        {tone === "ok" ? (
+          <span style={{ width: 26, height: 26, borderRadius: "50%", background: C.ok, color: "#fff", display: "grid", placeItems: "center", flex: "none" }}>
+            <Icon name="check" size={14} strokeWidth={2.6} />
+          </span>
+        ) : tone === "crit" ? (
+          <span style={{ width: 26, height: 26, borderRadius: "50%", background: C.crit, color: "#fff", display: "grid", placeItems: "center", flex: "none" }}>
+            <Icon name="x" size={13} strokeWidth={2.6} />
+          </span>
+        ) : (
+          <span className="spinner" style={{ width: 16, height: 16, color: C.blue, flex: "none", margin: 5 }} />
+        )}
+        <span style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1, minWidth: 0 }}>
+          <span style={{ fontSize: 13.5, fontWeight: 700, color: tone === "crit" ? "var(--crit-ink)" : "var(--ink)" }}>{title}</span>
+          {sub && <span style={{ fontSize: 12, color: "var(--ink-3)" }}>{sub}</span>}
+        </span>
+        <span className="mono" style={{ fontSize: 13, fontWeight: 700, color }}>{Math.round(p)}%</span>
+        {children}
+      </div>
+      <div style={{ height: 8, borderRadius: 99, background: "rgba(127,127,127,.18)", overflow: "hidden" }}>
+        <div className={tone === "run" ? "upd-bar run" : "upd-bar"} style={{ width: `${p}%`, height: "100%", borderRadius: 99, background: color, transition: "width .8s cubic-bezier(.2,.8,.2,1)" }} />
+      </div>
+      <style>{`.upd-bar.run{background-image:linear-gradient(45deg,rgba(255,255,255,.22) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.22) 50%,rgba(255,255,255,.22) 75%,transparent 75%,transparent);background-size:16px 16px;animation:upd-stripes 1s linear infinite}@keyframes upd-stripes{from{background-position:0 0}to{background-position:16px 0}}@media (prefers-reduced-motion:reduce){.upd-bar.run{animation:none}}`}</style>
+    </div>
+  );
+}
+
+/** The raw output, collapsed unless something went wrong. */
+function Details({ lines, running, open: initial, children }: { lines: JobLogLine[]; running: boolean; open?: boolean; children?: React.ReactNode }) {
+  const [open, setOpen] = useState(!!initial);
+  useEffect(() => {
+    if (initial) setOpen(true);
+  }, [initial]);
+  if (!lines.length) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 6, border: 0, background: "transparent", color: "var(--ink-3)", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: 0 }}>
+        <span style={{ display: "inline-flex", transform: open ? "rotate(90deg)" : undefined, transition: "transform .15s" }}>
+          <Icon name="chevronRight" size={12} />
+        </span>
+        {open ? "Hide details" : "Show details"}
+      </button>
+      {open && <LogBlock lines={lines} running={running} style={{ maxHeight: 220 }} />}
+      {open && children}
+    </div>
   );
 }
 

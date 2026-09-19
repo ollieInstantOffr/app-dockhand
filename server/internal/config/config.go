@@ -9,7 +9,7 @@ import (
 )
 
 // Version is overridden at build time via -ldflags "-X dockhand/internal/config.Version=…".
-var Version = "1.0.3"
+var Version = "1.0.4"
 
 type Config struct {
 	DatabaseURL string
