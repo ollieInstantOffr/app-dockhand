@@ -166,7 +166,8 @@ function stateShort(c: Container): string {
   return containerStateLabel(c.state, c.health);
 }
 
-function ContainerCard({ c, hostId, memTotal, selected, onToggle }: { c: Container; hostId: string; memTotal: number; selected: boolean; onToggle: () => void }) {
+/** One container. `hostName` is shown on fleet-wide views, where cards from several hosts mix. */
+export function ContainerCard({ c, hostId, memTotal, selected, onToggle, hostName }: { c: Container; hostId: string; memTotal: number; selected: boolean; onToggle: () => void; hostName?: string }) {
   const { openContainer, openTerminal } = useShell();
   const actions = useContainerActions(hostId);
   const [busy, setBusy] = useState(false);
@@ -240,7 +241,10 @@ function ContainerCard({ c, hostId, memTotal, selected, onToggle }: { c: Contain
             <span className="ellipsis" title={c.name} style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.01em", lineHeight: 1.2, flex: "0 1 auto", minWidth: 0 }}>{c.name}</span>
             {c.stack && <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.7, padding: "2px 6px", borderRadius: 6, border: "1px solid rgba(127,127,127,.4)", whiteSpace: "nowrap", letterSpacing: ".03em", maxWidth: "45%", minWidth: 24, overflow: "hidden", textOverflow: "ellipsis", flex: "0 6 auto" }} title={`stack: ${c.stack}`}>{c.stack}</span>}
           </span>
-          <span className="mono ellipsis" style={{ fontSize: 11, opacity: 0.6 }}>{c.image}</span>
+          <span className="mono ellipsis" style={{ fontSize: 11, opacity: 0.6 }}>
+            {hostName && <span style={{ fontWeight: 700, opacity: 1 }}>{hostName} · </span>}
+            {c.image}
+          </span>
         </span>
         <InkStatus color={dot} label={stateShort(c)} title={c.status} pulse={running && c.health !== "unhealthy" ? "live" : crashed || c.health === "unhealthy" || c.state === "restarting" ? "down" : undefined} />
         <CardMenu items={menu} onOpenChange={setMenuOpen} />

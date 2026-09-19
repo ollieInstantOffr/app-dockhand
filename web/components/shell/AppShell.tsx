@@ -129,6 +129,7 @@ export function AppShell({ user: initialUser, children }: { user: User; children
 
 const MAIN: { href: string; label: string; icon: IconName; kbd: string; match: (p: string) => boolean }[] = [
   { href: "/", label: "Fleet", icon: "grid", kbd: "G F", match: (p) => p === "/" || p.startsWith("/hosts") },
+  { href: "/resources", label: "All resources", icon: "layers", kbd: "G R", match: (p) => p.startsWith("/resources") },
   { href: "/deploy", label: "Deploy", icon: "rocket", kbd: "G D", match: (p) => p.startsWith("/deploy") },
   { href: "/uptime", label: "Uptime", icon: "pulse", kbd: "G U", match: (p) => p.startsWith("/uptime") },
   { href: "/alerts", label: "Notifications", icon: "bell", kbd: "N", match: (p) => p.startsWith("/alerts") },

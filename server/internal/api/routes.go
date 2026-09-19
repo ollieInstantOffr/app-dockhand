@@ -24,6 +24,10 @@ func (s *Server) registerAPI(r chi.Router) {
 	// Overview & search
 	r.Get("/overview", s.overview)
 	r.Get("/containers", s.allContainers)
+	r.Get("/fleet/stacks", s.fleetStacks)
+	r.Get("/fleet/images", s.fleetImages)
+	r.Get("/fleet/volumes", s.fleetVolumes)
+	r.Get("/fleet/networks", s.fleetNetworks)
 
 	// Hosts
 	r.Get("/hosts", s.listHosts)

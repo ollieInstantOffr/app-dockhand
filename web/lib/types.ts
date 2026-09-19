@@ -720,3 +720,11 @@ export interface DryRunResult {
   command: string; // what would run, e.g. "docker compose -p x config" or "docker run …"
   output: string; // rendered compose config / container create JSON, or the error
 }
+
+// ─── Fleet-wide lists (/api/fleet/*) ───────────────────────────────────────
+
+export interface FleetList<T> {
+  items: { hostId: ID; hostName: string; item: T }[];
+  errors: { hostId: ID; hostName: string; error: string }[]; // hosts that failed to answer
+  skipped: { hostId: ID; hostName: string; error: string }[]; // offline / pending hosts
+}

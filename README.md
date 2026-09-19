@@ -53,6 +53,12 @@ browser ──► api (Go, :8080 → host :5773)
 | `docs/API.md` | HTTP/WebSocket/MCP API reference (types in `web/lib/types.ts`) |
 | `design/` | The source design (`Dockhand.dc.html`) |
 
+### All resources
+
+**All resources** (spine, `G R`) lists every container, stack, image, volume and network across all hosts,
+with a host filter, the same container filters and bulk actions as a host page, unused-image/volume filters and
+a fleet-wide clean-up.
+
 ### Hosts
 
 Add a host with its address and SSH user, then append Dockhand's public key (Settings → Hosts) to

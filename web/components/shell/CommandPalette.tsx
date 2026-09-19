@@ -69,6 +69,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     const list: Item[] = [
       { id: "nav-fleet", group: "Navigation", label: "Fleet", sub: "All hosts at a glance", icon: "grid", hint: ["G", "F"], run: go("/") },
       { id: "nav-deploy", group: "Navigation", label: "Deploy", sub: "From GitHub or an image", icon: "rocket", hint: ["G", "D"], run: go("/deploy") },
+      { id: "nav-resources", group: "Navigation", label: "All resources", sub: "Containers, stacks, images, volumes and networks on every host", keywords: "fleet everything containers images volumes networks stacks", icon: "layers", hint: ["G", "R"], run: go("/resources") },
       { id: "nav-uptime", group: "Navigation", label: "Uptime", sub: "Monitors and incidents", icon: "pulse", hint: ["G", "U"], run: go("/uptime") },
       { id: "nav-alerts", group: "Navigation", label: "Alerts", icon: "bell", hint: ["G", "A"], run: go("/alerts") },
       { id: "nav-settings", group: "Navigation", label: "Settings", sub: "Hosts", icon: "settings", hint: ["G", "S"], run: go("/settings/hosts") },

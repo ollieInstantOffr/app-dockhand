@@ -39,6 +39,7 @@ Response shapes are defined in [`web/lib/types.ts`](../web/lib/types.ts); names 
 | GET | `/api/overview` | – | `Overview` |
 |---|---|---|---|
 | GET | `/api/containers` | – | `Container[]` across all hosts (cached from the poller; for palette + pickers) |
+| GET | `/api/fleet/stacks` · `/images` · `/volumes` · `/networks` | – | `FleetList<T>`: `{items: {hostId, hostName, item}[], errors, skipped}` — the per-host list from every reachable host, in parallel; a failing host lands in `errors`, offline ones in `skipped` |
 
 ## Hosts
 
