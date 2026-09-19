@@ -7,6 +7,9 @@ import { useShell } from "@/components/shell/context";
 import { errMsg, invalidate, post, useApi, useJob } from "@/lib/api";
 import { C, ago, shortSha } from "@/lib/format";
 import type { JobLogLine, JobRef, Settings, SystemInfo, UpdateHistoryPage, UpdaterStatus } from "@/lib/types";
+import { UpdateGauge } from "@/components/charts/UpdateGauge";
+import { UpdateStages } from "@/components/charts/UpdateStages";
+import type { UpdateStagesDatum } from "@/components/charts/UpdateStages.types";
 import { InkButton, InkHead, PILL, SetToggle, StatusPill, cardStyle, colStack, rowStyle, twoCol, useSettings } from "./common";
 
 const WINDOWS = ["Sun 03:00–05:00", "Sat 02:00–04:00", "Daily 04:00–05:00", "Daily 03:00–04:00", "Weekdays 02:00–03:00", "Weekends 03:00–05:00", "Any time"];
@@ -78,8 +81,9 @@ function VersionCard({ sys, job, jobKind, checking, onCheck, onUpdate, onDismiss
   const busy = !!job;
   // In git mode the job hands off to a detached updater; the update is still in progress after the job "succeeds".
   const handedOff = job?.status === "success" && job.result?.handedOff === true && sys?.mode === "git";
-  const running = job?.status === "running" || handedOff;
-  const pill = running ? { ...PILL.blue, label: jobKind === "update" ? "Updating" : "Rolling back" } : sys?.updateAvailable ? { ...PILL.warn, label: "Update available" } : { ...PILL.ok, label: "Up to date" };
+  const [watchFailed, setWatchFailed] = useState(false);
+  const running = job?.status === "running" || (handedOff && !watchFailed);
+  const pill = running ? { ...PILL.blue, label: jobKind === "update" ? "Updating" : "Rolling back" } : handedOff && watchFailed ? { ...PILL.crit, label: "Update failed" } : sys?.updateAvailable ? { ...PILL.warn, label: "Update available" } : { ...PILL.ok, label: "Up to date" };
   const status = !sys
     ? "Checking…"
     : running
@@ -177,7 +181,7 @@ function VersionCard({ sys, job, jobKind, checking, onCheck, onUpdate, onDismiss
               <Details lines={job.log} running={running} open={job.status === "failed"} />
             </>
           )}
-          {job.status === "success" && job.result?.handedOff === true && sys?.mode === "git" && <UpdaterWatch target={target} jobLog={job.log} startedAt={job.startedAt} onDismiss={onDismiss} />}
+          {job.status === "success" && job.result?.handedOff === true && sys?.mode === "git" && <UpdaterWatch target={target} jobLog={job.log} startedAt={job.startedAt} backupSkipped={job.steps[0]?.status === "skipped"} onFailed={setWatchFailed} onDismiss={onDismiss} />}
           {job.status === "success" && !(job.result?.handedOff === true && sys?.mode === "git") && (
             <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 14, background: "rgba(34,160,107,.1)", border: "1px solid rgba(34,160,107,.3)", animation: "rise .3s ease both" }}>
               <span style={{ width: 28, height: 28, borderRadius: "50%", background: C.ok, color: "#fff", display: "grid", placeItems: "center", flex: "none" }}>
@@ -207,7 +211,7 @@ function VersionCard({ sys, job, jobKind, checking, onCheck, onUpdate, onDismiss
  * Follows the detached updater after the API hands off: shows its output, reports
  * failures, and reloads once the API is back on the new commit.
  */
-function UpdaterWatch({ target, jobLog, startedAt, onDismiss }: { target: string; jobLog: JobLogLine[]; startedAt?: string; onDismiss: () => void }) {
+function UpdaterWatch({ target, jobLog, startedAt, backupSkipped, onFailed, onDismiss }: { target: string; jobLog: JobLogLine[]; startedAt?: string; backupSkipped?: boolean; onFailed?: (failed: boolean) => void; onDismiss: () => void }) {
   const [st, setSt] = useState<UpdaterStatus | null>(null);
   const [down, setDown] = useState(false);
   const [live, setLive] = useState<string>("");
@@ -220,6 +224,9 @@ function UpdaterWatch({ target, jobLog, startedAt, onDismiss }: { target: string
   const done = !!live && target && live.startsWith(target.slice(0, 7));
   const failed = st?.state === "failed";
   const slow = !done && !failed && now - started > 6 * 60_000;
+  useEffect(() => {
+    onFailed?.(failed);
+  }, [failed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (done || failed) return;
@@ -299,6 +306,13 @@ function UpdaterWatch({ target, jobLog, startedAt, onDismiss }: { target: string
   const pct = failed ? peak : Math.max(peak, raw);
   const stepNo = stages.findIndex((x) => x.key === stageKey) + 3; // after "Backing up" and "Preparing"
   const elapsed = Math.max(0, Math.round((now - started) / 1000));
+  const stripAt = ["prepare", "fetch", "build", "restart", "done"].indexOf(stageKey) + 1; // strip index (Prepare … Done)
+  const strip: Stage[] = GIT_STAGES.map((label, i) => {
+    if (i === 0) return { label, value: 100, status: backupSkipped ? "skipped" : "done" };
+    if (done || i < stripAt) return { label, value: 100, status: "done" };
+    if (i === stripAt) return { label, value: Math.round(within * 100), status: failed ? "failed" : "active" };
+    return { label, value: 0, status: "pending" };
+  });
   const title = done ? `Updated to ${target.slice(0, 7)}` : failed ? "The update failed" : slow ? "This is taking longer than expected" : stage.label;
   const sub = done
     ? "Reloading…"
@@ -307,7 +321,7 @@ function UpdaterWatch({ target, jobLog, startedAt, onDismiss }: { target: string
       : `Step ${Math.min(stepNo, 6)} of 6 · ${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")} elapsed · usually about 2 minutes`;
   return (
     <>
-      <ProgressBar pct={pct} tone={done ? "ok" : failed || slow ? "crit" : "run"} title={title} sub={sub}>
+      <ProgressBar pct={pct} tone={done ? "ok" : failed || slow ? "crit" : "run"} title={title} sub={sub} stages={strip}>
         {done && <button type="button" className="btn" style={{ height: 34, padding: "0 14px", fontSize: 12.5 }} onClick={() => window.location.reload()}>Reload</button>}
         {(failed || slow) && <button type="button" className="btn2" onClick={onDismiss}>Dismiss</button>}
       </ProgressBar>
@@ -334,8 +348,19 @@ function JobProgress({ steps, status, scale }: { steps: { label: string; status:
   const pct = status === "success" ? scale : ((done + (cur?.status === "running" ? 0.5 : 0)) / total) * scale;
   const failed = status === "failed";
   const ofN = scale < 100 ? 6 : total;
+  const st = (x?: { status: string }): Stage["status"] => (status === "success" ? "done" : STEP_STATUS[x?.status ?? "pending"] ?? "pending");
+  let stages: Stage[];
+  if (scale < 100) {
+    // Git mode: the API's job covers "Back up" and "Prepare" (preparing + handing off); the updater does the rest.
+    const prep = steps.slice(1);
+    const prepStatus: Stage["status"] = prep.some((x) => x.status === "failed") ? "failed" : prep.length && prep.every((x) => x.status === "done") ? "done" : prep.some((x) => x.status === "running" || x.status === "done") ? "active" : "pending";
+    stages = GIT_STAGES.map((label, i) => ({ label, value: 50, status: i === 0 ? st(steps[0]) : i === 1 ? (status === "success" ? "done" : prepStatus) : "pending" }));
+  } else {
+    stages = steps.map((x) => ({ label: x.label.replace(/ (Dockhand|database|the updater|to updater)$/i, ""), value: 50, status: st(x) }));
+  }
   return (
     <ProgressBar
+      stages={stages}
       pct={Math.max(3, pct)}
       tone={failed ? "crit" : status === "success" ? "ok" : "run"}
       title={failed ? `Failed: ${cur?.label ?? "update"}` : status === "success" ? "Done" : cur?.label ?? "Starting…"}
@@ -344,34 +369,33 @@ function JobProgress({ steps, status, scale }: { steps: { label: string; status:
   );
 }
 
-function ProgressBar({ pct, tone, title, sub, children }: { pct: number; tone: "run" | "ok" | "crit"; title: string; sub?: string; children?: React.ReactNode }) {
-  const color = tone === "ok" ? C.ok : tone === "crit" ? C.crit : C.blue;
+type Stage = UpdateStagesDatum;
+
+const STEP_STATUS: Record<string, Stage["status"]> = { done: "done", running: "active", pending: "pending", skipped: "skipped", failed: "failed" };
+
+/** The six stages of a git-mode update, as shown in the stage strip. */
+const GIT_STAGES = ["Back up", "Prepare", "Fetch", "Rebuild", "Restart", "Done"] as const;
+
+/** Update progress: Graphite semi gauge (overall %) + stage strip, matching the host header gauges and uptime bars. */
+function ProgressBar({ pct, tone, title, sub, stages, children }: { pct: number; tone: "run" | "ok" | "crit"; title: string; sub?: string; stages: Stage[]; children?: React.ReactNode }) {
   const p = Math.max(0, Math.min(100, pct));
   return (
-    <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(p)} aria-label={title} style={{ display: "flex", flexDirection: "column", gap: 10, padding: "14px 16px", borderRadius: 16, background: "var(--fill-1)", animation: "rise .3s ease both" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        {tone === "ok" ? (
-          <span style={{ width: 26, height: 26, borderRadius: "50%", background: C.ok, color: "#fff", display: "grid", placeItems: "center", flex: "none" }}>
-            <Icon name="check" size={14} strokeWidth={2.6} />
+    <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(p)} aria-label={title} style={{ display: "flex", alignItems: "center", gap: 18, padding: "16px 18px", borderRadius: 18, background: "var(--fill-1)", flexWrap: "wrap", animation: "rise .3s ease both" }}>
+      <UpdateGauge value={p} tone={tone} width={96} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, flex: "1 1 220px", minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1, minWidth: 0 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 700, color: tone === "crit" ? "var(--crit-ink)" : "var(--ink)" }}>
+              {tone === "run" && <span className="spinner" style={{ width: 12, height: 12, color: C.blue, flex: "none" }} />}
+              {tone === "ok" && <Icon name="checkCircle" size={15} color={C.ok} />}
+              <span className="ellipsis">{title}</span>
+            </span>
+            {sub && <span style={{ fontSize: 12, color: "var(--ink-3)" }}>{sub}</span>}
           </span>
-        ) : tone === "crit" ? (
-          <span style={{ width: 26, height: 26, borderRadius: "50%", background: C.crit, color: "#fff", display: "grid", placeItems: "center", flex: "none" }}>
-            <Icon name="x" size={13} strokeWidth={2.6} />
-          </span>
-        ) : (
-          <span className="spinner" style={{ width: 16, height: 16, color: C.blue, flex: "none", margin: 5 }} />
-        )}
-        <span style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1, minWidth: 0 }}>
-          <span style={{ fontSize: 13.5, fontWeight: 700, color: tone === "crit" ? "var(--crit-ink)" : "var(--ink)" }}>{title}</span>
-          {sub && <span style={{ fontSize: 12, color: "var(--ink-3)" }}>{sub}</span>}
-        </span>
-        <span className="mono" style={{ fontSize: 13, fontWeight: 700, color }}>{Math.round(p)}%</span>
-        {children}
+          {children}
+        </div>
+        <UpdateStages data={stages} />
       </div>
-      <div style={{ height: 8, borderRadius: 99, background: "rgba(127,127,127,.18)", overflow: "hidden" }}>
-        <div className={tone === "run" ? "upd-bar run" : "upd-bar"} style={{ width: `${p}%`, height: "100%", borderRadius: 99, background: color, transition: "width .8s cubic-bezier(.2,.8,.2,1)" }} />
-      </div>
-      <style>{`.upd-bar.run{background-image:linear-gradient(45deg,rgba(255,255,255,.22) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.22) 50%,rgba(255,255,255,.22) 75%,transparent 75%,transparent);background-size:16px 16px;animation:upd-stripes 1s linear infinite}@keyframes upd-stripes{from{background-position:0 0}to{background-position:16px 0}}@media (prefers-reduced-motion:reduce){.upd-bar.run{animation:none}}`}</style>
     </div>
   );
 }
