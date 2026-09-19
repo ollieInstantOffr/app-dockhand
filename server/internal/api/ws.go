@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -174,7 +175,7 @@ func (s *Server) containerExec(w http.ResponseWriter, r *http.Request) {
 	}
 	cid := chi.URLParam(r, "cid")
 	who := actor(r)
-	s.terminal(w, r, func(ctx context.Context) (hosts.Terminal, error) {
+	s.terminal(w, r, func(ctx context.Context, _ *wsConn) (hosts.Terminal, error) {
 		t, err := s.Ops.Exec(ctx, id, cid, cmd, cols, rows)
 		if err == nil {
 			slog.Info("container exec", "host", id, "container", cid, "cmd", cmd, "user", who)
@@ -190,7 +191,7 @@ func (s *Server) hostShell(w http.ResponseWriter, r *http.Request) {
 	}
 	cols, rows := sizeParams(r)
 	who := actor(r)
-	s.terminal(w, r, func(ctx context.Context) (hosts.Terminal, error) {
+	s.terminal(w, r, func(ctx context.Context, _ *wsConn) (hosts.Terminal, error) {
 		dctx, cancel := context.WithTimeout(ctx, 12*time.Second)
 		defer cancel()
 		conn, err := s.Conns.Get(dctx, id)
@@ -205,6 +206,42 @@ func (s *Server) hostShell(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// customShell opens an SSH login to an address the user typed in. Credentials
+// never go in the URL: the first websocket message is
+// {"type":"connect","address","port","user","auth","password","privateKey","passphrase","hostKey"}.
+func (s *Server) customShell(w http.ResponseWriter, r *http.Request) {
+	cols, rows := sizeParams(r)
+	who := actor(r)
+	s.terminal(w, r, func(ctx context.Context, ws *wsConn) (hosts.Terminal, error) {
+		_ = ws.c.SetReadDeadline(time.Now().Add(30 * time.Second))
+		var req struct {
+			Type string `json:"type"`
+			hosts.CustomSSH
+		}
+		if err := ws.c.ReadJSON(&req); err != nil || req.Type != "connect" {
+			return nil, errors.New("expected a connect message")
+		}
+		_ = ws.c.SetReadDeadline(time.Time{})
+		dest := fmt.Sprintf("%s@%s:%d", req.User, req.Address, req.Port)
+		_ = ws.write(websocket.BinaryMessage, []byte("\x1b[90m[dockhand] connecting to "+dest+"…\x1b[0m\r\n"))
+		dctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+		t, info, err := s.Conns.OpenCustomShell(dctx, req.CustomSSH, cols, rows)
+		if info.Fingerprint != "" {
+			_ = ws.writeJSON(map[string]any{"type": "hostkey", "fingerprint": info.Fingerprint, "known": req.HostKey != ""})
+		}
+		if err != nil {
+			slog.Info("custom ssh failed", "dest", dest, "user", who, "err", err)
+			return nil, err
+		}
+		if req.HostKey == "" {
+			_ = ws.write(websocket.BinaryMessage, []byte("\x1b[33m[dockhand] first connection — host key "+info.Fingerprint+" saved for next time\x1b[0m\r\n"))
+		}
+		slog.Info("custom ssh opened", "dest", dest, "auth", req.Auth, "user", who)
+		return t, nil
+	})
+}
+
 type termMsg struct {
 	Type string `json:"type"`
 	Data string `json:"data"`
@@ -213,7 +250,7 @@ type termMsg struct {
 }
 
 // terminal bridges a PTY session and a websocket (see the terminal protocol in docs/API.md).
-func (s *Server) terminal(w http.ResponseWriter, r *http.Request, open func(context.Context) (hosts.Terminal, error)) {
+func (s *Server) terminal(w http.ResponseWriter, r *http.Request, open func(context.Context, *wsConn) (hosts.Terminal, error)) {
 	c, err := s.upgrader().Upgrade(w, r, nil)
 	if err != nil {
 		return
@@ -221,7 +258,7 @@ func (s *Server) terminal(w http.ResponseWriter, r *http.Request, open func(cont
 	ws := &wsConn{c: c}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	term, err := open(ctx)
+	term, err := open(ctx, ws)
 	if err != nil {
 		msg := err.Error()
 		if errors.Is(err, hosts.ErrNoShell) {

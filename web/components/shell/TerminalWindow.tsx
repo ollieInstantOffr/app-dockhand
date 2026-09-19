@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Terminal } from "@xterm/xterm";
 import { useApi } from "@/lib/api";
+import { knownHostKey, saveHostKey, sshCommand, sshDest } from "@/lib/customSsh";
 import type { Container, Host } from "@/lib/types";
 import { copyText, useOutside } from "../ui";
 import { Icon, type IconName } from "../icons";
@@ -86,6 +87,7 @@ interface TabStatus {
 }
 
 function sameTarget(a: TerminalTarget, b: TerminalTarget): boolean {
+  if (a.kind === "ssh" || b.kind === "ssh") return a.kind === "ssh" && b.kind === "ssh" && a.id === b.id;
   if (a.kind !== b.kind || a.hostId !== b.hostId) return false;
   if (a.kind === "shell") return true;
   return a.containerId === (b as { containerId: string }).containerId;
@@ -95,6 +97,7 @@ const KIND: Record<TerminalTarget["kind"], { icon: IconName; color: string }> = 
   shell: { icon: "terminal", color: "#9fd18b" },
   exec: { icon: "box", color: "#7dc4ff" },
   logs: { icon: "logs", color: "#f2c05c" },
+  ssh: { icon: "globe", color: "#c9a2ff" },
 };
 
 let tabSeq = 0;
@@ -104,7 +107,7 @@ let tabSeq = 0;
  * opens a tab for its target, or focuses the tab that already shows it.
  */
 export function TerminalWindow({ requests, onClose }: { requests: { target: TerminalTarget; seq: number }[]; onClose: () => void }) {
-  const { toast } = useShell();
+  const { toast, openDialog } = useShell();
   const init = useMemo(loadStore, []);
   const [geom, setGeom] = useState<Geom>(init.geom);
   const [font, setFont] = useState(init.font);
@@ -240,6 +243,7 @@ export function TerminalWindow({ requests, onClose }: { requests: { target: Term
   }, []);
 
   const label = (t: TerminalTarget): string => {
+    if (t.kind === "ssh") return sshDest(t.conn);
     const h = hostById.get(t.hostId);
     if (t.kind === "shell") return h ? `${h.method === "local" ? "root" : h.user || "root"}@${h.name}` : "host shell";
     const name = t.name ?? ctrById.get(`${t.hostId}/${t.containerId}`)?.name ?? t.containerId.slice(0, 12);
@@ -247,6 +251,7 @@ export function TerminalWindow({ requests, onClose }: { requests: { target: Term
   };
 
   const meta = (t: TerminalTarget): string => {
+    if (t.kind === "ssh") return sshCommand(t.conn);
     const h = hostById.get(t.hostId);
     const name = t.kind === "shell" ? "" : t.name ?? ctrById.get(`${t.hostId}/${t.containerId}`)?.name ?? t.containerId.slice(0, 12);
     if (t.kind === "shell") return h ? (h.method === "local" ? "nsenter -t 1 (host shell)" : `ssh ${h.user || "root"}@${h.address}${h.port && h.port !== 22 ? ` -p ${h.port}` : ""}`) : "ssh";
@@ -400,7 +405,7 @@ export function TerminalWindow({ requests, onClose }: { requests: { target: Term
                 style={{ position: "relative", height: HEAD - 6, padding: "0 10px 0 14px", border: 0, background: on ? "#15181f" : "transparent", color: on ? "#fff" : "#aab1bf", fontSize: 12.5, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap", flex: "none", borderRadius: "10px 10px 0 0", marginTop: 6, maxWidth: 220 }}
               >
                 <Icon name={k.icon} size={13} color={k.color} strokeWidth={2.2} />
-                <span className={t.target.kind === "shell" ? "mono ellipsis" : "ellipsis"} style={{ fontSize: t.target.kind === "shell" ? 12 : 12.5 }}>{label(t.target)}</span>
+                <span className={t.target.kind === "shell" || t.target.kind === "ssh" ? "mono ellipsis" : "ellipsis"} style={{ fontSize: t.target.kind === "shell" || t.target.kind === "ssh" ? 12 : 12.5 }}>{label(t.target)}</span>
                 <span
                   role="button"
                   aria-label="Close tab"
@@ -476,6 +481,17 @@ export function TerminalWindow({ requests, onClose }: { requests: { target: Term
                   </div>
                 );
               })}
+              <MenuLabel>Other</MenuLabel>
+              <MenuBtn
+                dot="#c9a2ff"
+                icon="globe"
+                label="Custom SSH…"
+                sub="any address"
+                onClick={() => {
+                  setPlusOpen(false);
+                  openDialog({ type: "customSsh" });
+                }}
+              />
               {!sshHosts.length && runningByHost.size === 0 && <div style={{ padding: "6px 10px 8px", fontSize: 12, color: "#6b7280" }}>{containers ? "No hosts or running containers to connect to." : "Loading…"}</div>}
             </div>
           )}
@@ -509,11 +525,20 @@ export function TerminalWindow({ requests, onClose }: { requests: { target: Term
               />
             );
           }
-          const path = t.target.kind === "shell" ? `/api/hosts/${t.target.hostId}/shell` : `/api/hosts/${t.target.hostId}/containers/${t.target.containerId}/exec?cmd=auto`;
+          const tg = t.target;
+          const path = tg.kind === "ssh" ? "/api/ssh" : tg.kind === "shell" ? `/api/hosts/${tg.hostId}/shell` : `/api/hosts/${tg.hostId}/containers/${tg.containerId}/exec?cmd=auto`;
           return (
             <XTerm
               key={t.key}
               path={path}
+              hello={tg.kind === "ssh" ? () => ({ type: "connect", ...tg.conn, hostKey: knownHostKey(tg.conn) }) : undefined}
+              onControl={
+                tg.kind === "ssh"
+                  ? (m) => {
+                      if (m.type === "hostkey" && typeof m.fingerprint === "string" && !knownHostKey(tg.conn)) saveHostKey(tg.conn, m.fingerprint);
+                    }
+                  : undefined
+              }
               active={on}
               fontSize={font}
               onReady={(term) => {

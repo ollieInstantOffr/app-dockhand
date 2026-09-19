@@ -75,7 +75,8 @@ For `method: "local"` the SSH steps are `skipped` and Docker is reached via `/va
 | GET | `/api/hosts/:id/containers/:cid/logs?tail=500&since=1h&download=1` | – | `text/plain` log download |
 | WS | `/api/hosts/:id/containers/:cid/logs/ws?tail=200&since=&follow=1` | – | server → client text frames, one JSON object per line: `{"t": ISODate, "stream": "stdout"|"stderr", "line": "…"}` |
 | WS | `/api/hosts/:id/containers/:cid/exec?cmd=/bin/sh&cols=120&rows=32` | – | terminal (see below) |
-| WS | `/api/hosts/:id/shell?cols=120&rows=32` | – | SSH login shell on the host (terminal protocol) |
+| WS | `/api/hosts/:id/shell?cols=120&rows=32` | – | Login shell on the host: SSH, or an nsenter helper for the local host (terminal protocol) |
+| WS | `/api/ssh?cols=120&rows=32` | – | Custom SSH to any address. First message: `{"type":"connect","address","port","user","auth":"key\|password\|privateKey","password"?,"privateKey"?,"passphrase"?,"hostKey"?}`; the server replies `{"type":"hostkey","fingerprint"}` and refuses before authenticating when `hostKey` (a SHA256 fingerprint) doesn't match. Then the terminal protocol |
 
 Terminal protocol: server → client **binary** frames carry raw PTY output. Client → server **text** frames are JSON:
 `{"type":"input","data":"ls\r"}` or `{"type":"resize","cols":120,"rows":32}`. The server closes the socket with a

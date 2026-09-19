@@ -78,6 +78,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       { id: "nav-updates", group: "Navigation", label: "Settings · Updates", keywords: "self update version", icon: "update", run: go("/settings/updates"), searchOnly: true },
       { id: "nav-account", group: "Navigation", label: "Settings · Account", keywords: "password profile sessions", icon: "user", run: go("/settings/account"), searchOnly: true },
     ];
+    list.push({ id: "custom-ssh", group: "Actions", label: "Custom SSH…", sub: "Open a terminal to any address", keywords: "ssh connect terminal remote server ip login", icon: "globe", run: () => shell.openDialog({ type: "customSsh" }) });
     for (const h of hosts ?? []) {
       list.push({ id: `host-${h.id}`, group: "Hosts", label: h.name, sub: `${h.address}${h.os ? ` · ${h.os}` : ""}`, keywords: h.status, avatar: { name: h.name, color: h.color, dot: hostStatusColor(h.status) }, run: go(`/hosts/${h.id}`) });
       list.push({ id: `ssh-${h.id}`, group: "Hosts", label: `Open SSH on ${h.name}`, sub: `${h.user}@${h.address}`, keywords: "shell terminal ssh console", icon: "terminal", run: () => shell.openTerminal({ kind: "shell", hostId: h.id }), searchOnly: true });

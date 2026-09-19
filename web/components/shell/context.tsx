@@ -1,5 +1,6 @@
 "use client";
 
+import type { CustomSshConn } from "@/lib/customSsh";
 import { createContext, useContext, type ReactNode } from "react";
 import type { IconName } from "../icons";
 import type { HostInput, User } from "@/lib/types";
@@ -35,13 +36,15 @@ export type DialogState =
   | { type: "monitor"; hostId?: string }
   | { type: "network"; hostId: string }
   | { type: "attachNetwork"; hostId: string; networkId: string; networkName: string }
-  | { type: "channel"; channelType?: string };
+  | { type: "channel"; channelType?: string }
+  | { type: "customSsh" };
 
 /** A session in the floating terminal window. */
 export type TerminalTarget =
   | { kind: "shell"; hostId: string } // SSH login shell on the host
   | { kind: "exec"; hostId: string; containerId: string; name?: string } // shell inside a container
-  | { kind: "logs"; hostId: string; containerId: string; name?: string }; // live container logs
+  | { kind: "logs"; hostId: string; containerId: string; name?: string } // live container logs
+  | { kind: "ssh"; id: string; conn: CustomSshConn }; // SSH to an address the user typed in (credentials stay in memory)
 
 export interface Shell {
   user: User;

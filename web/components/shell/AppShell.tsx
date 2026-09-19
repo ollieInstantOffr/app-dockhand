@@ -349,6 +349,7 @@ function CreateMenu({ anchor, mobile, hosts, onClose }: { anchor: DOMRect; mobil
       ))}
       <span style={{ height: 1, background: "rgba(127,127,127,.3)", margin: "4px 8px" }} />
       <MenuRow icon="server" label="Add host" sub="Connect a machine running Docker" run={() => { onClose(); openDialog({ type: "host" }); }} />
+      <MenuRow icon="globe" label="Custom SSH" sub="Open a terminal to any address" run={() => { onClose(); openDialog({ type: "customSsh" }); }} />
       {noHosts && <div style={{ padding: "4px 10px 8px", fontSize: 11.5, opacity: 0.6 }}>Add a host first to deploy containers.</div>}
       <style>{`.cm-row:hover:not(:disabled){background:rgba(127,127,127,.2)}`}</style>
     </div>

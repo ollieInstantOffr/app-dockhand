@@ -39,6 +39,7 @@ func (s *Server) registerAPI(r chi.Router) {
 	r.Get("/hosts/{id}/metrics", s.hostMetrics)
 	r.Get("/hosts/{id}/disk", s.hostDisk)
 	r.Get("/hosts/{id}/shell", s.hostShell)
+	r.Get("/ssh", s.customShell)
 
 	// Containers
 	r.Get("/hosts/{id}/containers", s.listContainers)

@@ -10,7 +10,15 @@ import type { FitAddon } from "@xterm/addon-fit";
  * Protocol: binary frames = PTY output; text frames {"type":"input"|"resize"} to the
  * server; {"type":"exit"} from the server ends the session.
  */
-export function XTerm({ path, active, fontSize = 13, onDims, onState, onReady }: { path: string; active: boolean; fontSize?: number; onDims?: (d: { cols: number; rows: number }) => void; onState?: (s: "connecting" | "open" | "ended") => void; onReady?: (t: Terminal | null) => void }) {
+/**
+ * `hello` is sent as the first message on every (re)connect — e.g. custom SSH
+ * credentials, which must not go in the URL. Unknown JSON messages go to `onControl`.
+ */
+export function XTerm({ path, active, fontSize = 13, onDims, onState, onReady, hello, onControl }: { path: string; active: boolean; fontSize?: number; onDims?: (d: { cols: number; rows: number }) => void; onState?: (s: "connecting" | "open" | "ended") => void; onReady?: (t: Terminal | null) => void; hello?: () => unknown; onControl?: (m: Record<string, unknown>) => void }) {
+  const helloRef = useRef(hello);
+  helloRef.current = hello;
+  const onControlRef = useRef(onControl);
+  onControlRef.current = onControl;
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -124,6 +132,8 @@ export function XTerm({ path, active, fontSize = 13, onDims, onState, onReady }:
         onStateRef.current?.("ended");
       };
       ws.onopen = () => {
+        const h = helloRef.current?.();
+        if (h !== undefined) ws?.send(JSON.stringify(h));
         onStateRef.current?.("open");
         if (active) t.focus();
       };
@@ -137,6 +147,10 @@ export function XTerm({ path, active, fontSize = 13, onDims, onState, onReady }:
             }
             if (m && m.type === "error") {
               t.write(`\r\n\x1b[31m${m.error ?? m.message ?? "error"}\x1b[0m\r\n`);
+              return;
+            }
+            if (m && typeof m.type === "string") {
+              onControlRef.current?.(m);
               return;
             }
           } catch {

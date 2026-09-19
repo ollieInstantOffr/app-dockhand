@@ -59,6 +59,11 @@ on first connect. Password auth and the local Docker socket are also supported.
 container. For the local host (Docker socket, no SSH) the host shell runs as root through a short-lived
 privileged `alpine` helper that `nsenter`s the host's namespaces.
 
+**Custom SSH** (the + menu, ⌘K or the terminal's + menu) opens a terminal to any address — a machine that isn't
+a Dockhand host — with Dockhand's key, a password or a pasted private key. Credentials are used for that session
+only and never stored; recent destinations and host key fingerprints are remembered in the browser, and a
+changed host key is refused before anything is sent.
+
 Compose stacks created through Dockhand live in `/opt/dockhand/stacks/<name>` on each host; `docker compose`
 must be installed there. Deploys from GitHub stream the repository tarball through Dockhand, so hosts need
 neither git nor your token.

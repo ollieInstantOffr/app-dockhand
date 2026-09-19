@@ -38,7 +38,10 @@ type Target struct {
 	User     string
 	Method   string
 	Password string
-	HostKey  string // pinned authorized_keys line, "" = trust on first use
+	HostKey  string     // pinned authorized_keys line, "" = trust on first use
+	Signer   ssh.Signer // overrides Dockhand's key for key auth (custom SSH sessions)
+	// HostFingerprint pins the host key by SHA256 fingerprint (custom SSH sessions).
+	HostFingerprint string
 }
 
 // DialInfo describes a successful SSH handshake.
@@ -250,7 +253,12 @@ func (c *Conn) Shell(ctx context.Context, cols, rows int) (Terminal, error) {
 		return c.localShell(ctx, cols, rows)
 	}
 	c.touch()
-	sess, err := c.ssh.NewSession()
+	return openShell(c.ssh, cols, rows)
+}
+
+// openShell starts a login shell with a PTY on an SSH connection.
+func openShell(sshc *ssh.Client, cols, rows int) (*sshTerm, error) {
+	sess, err := sshc.NewSession()
 	if err != nil {
 		return nil, err
 	}
@@ -449,9 +457,17 @@ func (c *Conn) alive() bool {
 }
 
 // ErrHostKeyMismatch is returned when the server presents a different key than the pinned one.
-type ErrHostKeyMismatch struct{ Expected, Got string }
+type ErrHostKeyMismatch struct {
+	Expected, Got string
+	Custom        bool // a custom SSH session (the key was remembered in the browser)
+}
 
 func (e *ErrHostKeyMismatch) Error() string {
+	if e.Custom {
+		return fmt.Sprintf("WARNING: the host key has changed. Saved %s, but the server presented %s. "+
+			"This could be a reinstalled server or someone intercepting the connection, so nothing was sent. "+
+			"If you trust the new key, forget the saved one in Custom SSH and reconnect", e.Expected, e.Got)
+	}
 	return fmt.Sprintf("host key mismatch: expected %s but the server presented %s — if the host was reinstalled, reset the pinned key in the host settings", e.Expected, e.Got)
 }
 
@@ -541,6 +557,10 @@ func (m *Manager) DialSSH(ctx context.Context, t Target, step StepFunc) (DialInf
 				hostKeyErr = &ErrHostKeyMismatch{Expected: exp, Got: info.Fingerprint}
 				return hostKeyErr
 			}
+			if t.HostFingerprint != "" && t.HostFingerprint != info.Fingerprint {
+				hostKeyErr = &ErrHostKeyMismatch{Expected: t.HostFingerprint, Got: info.Fingerprint, Custom: true}
+				return hostKeyErr
+			}
 			return nil
 		},
 		BannerCallback: func(string) error { return nil },
@@ -554,6 +574,8 @@ func (m *Manager) DialSSH(ctx context.Context, t Target, step StepFunc) (DialInf
 				}
 				return ans, nil
 			})}
+	} else if t.Signer != nil {
+		cfg.Auth = []ssh.AuthMethod{ssh.PublicKeys(t.Signer)}
 	} else {
 		cfg.Auth = []ssh.AuthMethod{ssh.PublicKeys(m.signer)}
 	}
@@ -591,7 +613,11 @@ func (m *Manager) DialSSH(ctx context.Context, t Target, step StepFunc) (DialInf
 			return info, nil, err
 		}
 		info.ConnectMs = report("connect", start, "", nil)
-		err := fmt.Errorf("authentication as %s failed: %s", t.User, authHint(r.err, t.Method))
+		method := t.Method
+		if t.Signer != nil {
+			method = "privateKey"
+		}
+		err := fmt.Errorf("authentication as %s failed: %s", t.User, authHint(r.err, method))
 		report("auth", handshakeDone, "", err)
 		return info, nil, err
 	}
@@ -606,16 +632,25 @@ func (m *Manager) DialSSH(ctx context.Context, t Target, step StepFunc) (DialInf
 	}
 	info.AuthMs = time.Since(handshakeDone).Milliseconds()
 	if step != nil {
-		step("auth", info.AuthMs, fmt.Sprintf("%s@%s via %s", t.User, t.Address, map[bool]string{true: "password", false: "Dockhand key"}[t.Method == "password"]), nil)
+		via := "Dockhand key"
+		if t.Method == "password" {
+			via = "password"
+		} else if t.Signer != nil {
+			via = "private key"
+		}
+		step("auth", info.AuthMs, fmt.Sprintf("%s@%s via %s", t.User, t.Address, via), nil)
 	}
 	return info, ssh.NewClient(r.cc, r.chans, r.reqs), nil
 }
 
 func authHint(err error, method string) string {
 	msg := err.Error()
-	if strings.Contains(msg, "unable to authenticate") {
+	if strings.Contains(msg, "unable to authenticate") || strings.Contains(msg, "unexpected message type 51") {
 		if method == "password" {
 			return "the server rejected the password"
+		}
+		if method == "privateKey" {
+			return "the server rejected the private key — its public half must be in ~/.ssh/authorized_keys"
 		}
 		return "the server rejected Dockhand's key — add it to ~/.ssh/authorized_keys on the host"
 	}

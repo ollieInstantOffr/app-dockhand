@@ -9,6 +9,7 @@ import { GithubDialog } from "./GithubDialog";
 import { MonitorDialog } from "./MonitorDialog";
 import { AttachNetworkDialog, NetworkDialog } from "./NetworkDialogs";
 import { ChannelDialog } from "./ChannelDialog";
+import { CustomSshDialog } from "./CustomSshDialog";
 
 /** Renders the wizard dialog for the current shell dialog state. */
 export function Dialogs({ state, onClose }: { state: DialogState; onClose: () => void }) {
@@ -31,6 +32,8 @@ export function Dialogs({ state, onClose }: { state: DialogState; onClose: () =>
       return <AttachNetworkDialog hostId={state.hostId} networkId={state.networkId} networkName={state.networkName} onClose={onClose} />;
     case "channel":
       return <ChannelDialog channelType={state.channelType} onClose={onClose} />;
+    case "customSsh":
+      return <CustomSshDialog onClose={onClose} />;
     default:
       return null;
   }
