@@ -777,3 +777,106 @@ export interface RegistryCredential {
   lastUsedAt: ISODate | null;
   createdAt: ISODate;
 }
+
+// ─── Machines (OS-level host management) ───────────────────────────────────
+
+export interface MachinePackage {
+  name: string;
+  current: string;
+  candidate: string;
+  origin: string;
+  security: boolean;
+}
+
+export interface MachineService {
+  name: string;
+  description: string;
+  active: "running" | "failed" | "inactive" | "exited" | "activating" | string;
+  enabled: boolean;
+  since: string;
+}
+
+export interface MachinePort {
+  port: number;
+  address: string;
+  process: string;
+  public: boolean; // listening on a non-loopback address
+}
+
+export type CheckStatus = "ok" | "bad" | "warn" | "unknown";
+
+export interface MachineCheck {
+  id: string;
+  title: string;
+  sub: string;
+  status: CheckStatus;
+  group: "ssh" | "updates" | "network" | "services" | string;
+  fix: string; // "" = Dockhand can't fix it
+  fixNote?: string;
+  fixRisky?: boolean;
+}
+
+export interface Machine {
+  hostId: ID;
+  name: string;
+  color: string;
+  status: HostStatus;
+  method: string;
+  os: string;
+  release: string;
+  kernel: string;
+  arch: string;
+  pkgManager: string; // "apt" | "none"
+  uptimeSec: number;
+  load: string;
+  tempC: number | null;
+  reboot: boolean;
+  rebootPkgs: string[];
+  packages: MachinePackage[];
+  security: number;
+  services: MachineService[];
+  ports: MachinePort[];
+  checks: MachineCheck[];
+  sudo: boolean;
+  lastPatchAt: ISODate | null;
+  aptUpdateAt: ISODate | null;
+  collectedAt: ISODate | null;
+  error: string;
+  baselines: string[];
+  drift: number;
+}
+
+export interface BaselineRow {
+  hostId: ID;
+  name: string;
+  color: string;
+  status: HostStatus;
+  cells: Record<string, CheckStatus>;
+  drift: number;
+}
+
+export interface Baseline {
+  id: ID;
+  name: string;
+  description: string;
+  color: string;
+  rules: string[];
+  hostIds: ID[];
+  createdAt: ISODate;
+  compliance: BaselineRow[];
+  pct: number;
+  drift: number;
+}
+
+export interface BaselineInput {
+  name: string;
+  description: string;
+  color: string;
+  rules: string[];
+  hostIds: ID[];
+}
+
+export interface BaselinesResponse {
+  baselines: Baseline[];
+  rules: { id: string; title: string; group: string }[];
+}

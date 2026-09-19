@@ -40,6 +40,16 @@ Response shapes are defined in [`web/lib/types.ts`](../web/lib/types.ts); names 
 |---|---|---|---|
 | GET | `/api/containers` | – | `Container[]` across all hosts (cached from the poller; for palette + pickers) |
 | GET | `/api/fleet/stacks` · `/images` · `/volumes` · `/networks` | – | `FleetList<T>`: `{items: {hostId, hostName, item}[], errors, skipped}` — the per-host list from every reachable host, in parallel; a failing host lands in `errors`, offline ones in `skipped` |
+| GET | `/api/machines` | – | `Machine[]`: OS facts, packages, services, ports and hardening checks per host |
+| GET | `/api/machines/:id[?refresh=1]` | – | One `Machine`, optionally scanned first |
+| POST | `/api/machines/:id/refresh` | – | Collect facts now (returns the `Machine`) |
+| POST | `/api/machines/:id/apt-update` · `/install` | `{packages?, securityOnly?}` | `JobRef`: refresh package lists · install updates |
+| POST | `/api/machines/:id/fix/:check` | – | `JobRef`: apply one hardening fix (`ssh-password`, `firewall`, `auto-updates`, `security-updates`, `fail2ban`, `reboot`) |
+| POST | `/api/machines/:id/service` | `{unit, action}` | `JobRef`: systemctl start/stop/restart |
+| POST | `/api/machines/fleet/:action` | – | `JobRef`: `audit`, `security` or `all` across every reachable machine |
+| GET | `/api/baselines` | – | `{baselines: Baseline[], rules}` with the machine × rule compliance matrix |
+| POST/PUT/DELETE | `/api/baselines[/:id]` | `BaselineInput` | Create, update, delete a baseline |
+| POST | `/api/baselines/:id/apply` | – | `JobRef`: fix every failing rule on the baseline's machines |
 | GET | `/api/registry` | – | `RegistryInfo` for the built-in registry |
 | GET | `/api/registry/repos` · `/api/registry/tags?repo=` | – | `RegistryRepo[]` · `RegistryTag[]` (newest first) |
 | DELETE | `/api/registry/tags?repo=&tag=` | – | Delete the image a tag points to (every tag sharing its digest) |

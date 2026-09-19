@@ -30,6 +30,7 @@ import (
 	"dockhand/internal/gitdeploy"
 	"dockhand/internal/hosts"
 	"dockhand/internal/jobs"
+	"dockhand/internal/machines"
 	"dockhand/internal/mcp"
 	"dockhand/internal/mcptools"
 	"dockhand/internal/model"
@@ -235,6 +236,7 @@ func run(cfg *config.Config) error {
 		slog.Warn("registry system token", "err", err)
 	}
 	regauth.Src = regSvc
+	machineSvc := machines.New(pool, hostStore, conns, jobRunner)
 	sysSvc.OnAutoUpdate = func(target, jobID string) {
 		alertEngine.Event(context.Background(), alerts.Spec{Key: "auto_update:" + jobID, Severity: "info", Kind: "self_update",
 			Title: "Dockhand is updating itself to " + target, Text: "Automatic update inside the update window. Dockhand restarts in a minute or two.",
@@ -281,7 +283,7 @@ func run(cfg *config.Config) error {
 
 	handler, err := api.New(api.Deps{Cfg: cfg, DB: pool, Auth: authSvc, Settings: st, Hosts: hostStore, Conns: conns, Monitor: mon,
 		Ops: ops, Stacks: stackSvc, Jobs: jobRunner, Git: gitSvc, Uptime: upSvc, Alerts: alertEngine, MCP: mcpProvider,
-		System: sysSvc, Registry: regSvc, HostKey: hostKey, DeployKey: deployKey, Preflight: deploycheck.New(hostStore, ops, stackSvc, mon)})
+		System: sysSvc, Registry: regSvc, Machines: machineSvc, HostKey: hostKey, DeployKey: deployKey, Preflight: deploycheck.New(hostStore, ops, stackSvc, mon)})
 	if err != nil {
 		return err
 	}
@@ -290,6 +292,7 @@ func run(cfg *config.Config) error {
 	go upSvc.Run(svcCtx)
 	go gitSvc.SyncLoop(svcCtx)
 	go sysSvc.RunAutoUpdates(svcCtx)
+	go machineSvc.Run(svcCtx)
 	go mcpProvider.RunDedicated(svcCtx, mcp.NewHandler(mcpProvider, "dockhand", cfg.Version))
 	go housekeeping(svcCtx, authSvc, hostStore, conns, mon, upSvc, alertEngine, mcpProvider, jobRunner)
 

@@ -28,6 +28,7 @@ import (
 	"dockhand/internal/gitdeploy"
 	"dockhand/internal/hosts"
 	"dockhand/internal/jobs"
+	"dockhand/internal/machines"
 	"dockhand/internal/mcp"
 	"dockhand/internal/mcptools"
 	"dockhand/internal/monitor"
@@ -58,6 +59,7 @@ type Deps struct {
 	MCP       *mcptools.Provider
 	System    *system.Service
 	Registry  *registry.Service
+	Machines  *machines.Service
 	HostKey   *sshkeys.Key
 	DeployKey *sshkeys.Key
 }

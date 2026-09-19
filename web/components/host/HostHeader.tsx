@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { errMsg, invalidate, post } from "@/lib/api";
 import { C, ago, avatarBg, bytes, duration, initial, plural } from "@/lib/format";
 import type { Container, Host, HostTestResult, JobRef } from "@/lib/types";
@@ -32,6 +33,7 @@ export async function confirmPrune(shell: Pick<Shell, "confirm" | "toast">, host
 }
 
 export function HostHeader({ host, containers }: { host: Host | undefined; containers: Container[] | undefined }) {
+  const router = useRouter();
   const shell = useShell();
   if (!host) {
     return (
@@ -109,6 +111,14 @@ export function HostHeader({ host, containers }: { host: Host | undefined; conta
           <span className="mono ellipsis" style={{ fontSize: 11.5, opacity: 0.6 }}>{meta}</span>
         </span>
         <ShellButton host={host} containers={containers} offline={offline} />
+        <button
+          onClick={() => router.push(`/machines?host=${host.id}`)}
+          title="Operating system updates, hardening and services"
+          style={{ height: 36, padding: "0 14px", borderRadius: 12, border: 0, background: "rgba(127,127,127,.22)", color: "var(--btn-ink)", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap", flex: "none" }}
+        >
+          <Icon name="shield" size={15} strokeWidth={2.2} />
+          OS &amp; security
+        </button>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 20, padding: "16px 20px", flexWrap: "wrap" }}>
         <span style={{ display: "flex", alignItems: "flex-end", gap: 10, flex: 1, minWidth: 200 }}>

@@ -78,6 +78,18 @@ Compose stacks created through Dockhand live in `/opt/dockhand/stacks/<name>` on
 must be installed there. Deploys from GitHub stream the repository tarball through Dockhand, so hosts need
 neither git nor your token.
 
+### Machines
+
+**Machines** (spine, `G M`, or "OS & security" on a host page) manages the hosts themselves, over the same SSH
+connection: pending apt updates (install everything, only security, or a selection), systemd services,
+listening ports, and hardening checks — SSH password/root login, firewall, unattended-upgrades, pending
+security updates, reboot required, fail2ban — most with a one-click fix. Facts are collected on demand and
+every 30 minutes. Fixes and installs need the SSH user to be root or have passwordless sudo.
+
+**Baselines** group machines under a set of those rules and show a machine × rule compliance grid; **Fix**
+applies every failing rule across the group. Package management is apt-only (Debian, Ubuntu, Raspberry Pi OS);
+services, ports and most checks work on any systemd machine.
+
 ### Registries
 
 **Private registries** (Settings → Registries): save a login for Docker Hub, GHCR, GitLab, Quay or any other

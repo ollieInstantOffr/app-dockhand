@@ -25,6 +25,7 @@ const GROUPS: { title: string; items: { keys: string[]; label: string }[] }[] = 
       { keys: ["G", "F"], label: "Fleet" },
       { keys: ["G", "D"], label: "Deploy" },
       { keys: ["G", "R"], label: "All resources" },
+      { keys: ["G", "M"], label: "Machines" },
       { keys: ["G", "U"], label: "Uptime" },
       { keys: ["G", "A"], label: "Alerts" },
       { keys: ["G", "S"], label: "Settings" },
@@ -124,7 +125,7 @@ export function useGlobalShortcuts(shell: Shell, s: { paletteOpen: boolean; setP
       const lower = k.toLowerCase();
       if (gAt.current && Date.now() - gAt.current < 1200) {
         gAt.current = 0;
-        const dest: Record<string, string> = { f: "/", r: "/resources", d: "/deploy", u: "/uptime", a: "/alerts", s: "/settings/hosts" };
+        const dest: Record<string, string> = { f: "/", r: "/resources", m: "/machines", d: "/deploy", u: "/uptime", a: "/alerts", s: "/settings/hosts" };
         if (dest[lower]) {
           e.preventDefault();
           router.push(dest[lower]);

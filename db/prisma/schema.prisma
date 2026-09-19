@@ -90,6 +90,8 @@ model Host {
   alerts      Alert[]
   events      ContainerEvent[]
 
+    machineFacts MachineFacts?
+
   @@map("hosts")
 }
 
@@ -380,4 +382,47 @@ model RegistryToken {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   @@map("registry_tokens")
+}
+
+// ─── Machines (OS-level host management) ───────────────────────────────────
+
+// Facts collected over SSH: OS, packages, services, ports and hardening checks.
+model MachineFacts {
+  hostId      String   @id @map("host_id") @db.Uuid
+  os          String   @default("")
+  release     String   @default("")
+  kernel      String   @default("")
+  arch        String   @default("")
+  pkgManager  String   @default("") @map("pkg_manager")
+  uptimeSec   Int      @default(0) @map("uptime_sec")
+  load        String   @default("")
+  tempC       Float?   @map("temp_c")
+  reboot      Boolean  @default(false) // reboot required
+  rebootPkgs  Json     @default("[]") @map("reboot_pkgs")
+  packages    Json     @default("[]") // upgradable packages
+  services    Json     @default("[]")
+  ports       Json     @default("[]")
+  checks      Json     @default("[]") // hardening checks
+  sudo        Boolean  @default(false) // passwordless sudo (or root)
+  lastPatchAt DateTime? @map("last_patch_at") @db.Timestamptz
+  aptUpdateAt DateTime? @map("apt_update_at") @db.Timestamptz
+  error       String   @default("")
+  collectedAt DateTime @default(now()) @map("collected_at") @db.Timestamptz
+
+  host Host @relation(fields: [hostId], references: [id], onDelete: Cascade)
+
+  @@map("machine_facts")
+}
+
+// A named set of hardening rules applied to a group of machines.
+model Baseline {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  description String   @default("")
+  color       String   @default("#2f6fed")
+  rules       Json     @default("[]") // check ids
+  hostIds     Json     @default("[]") @map("host_ids")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("baselines")
 }

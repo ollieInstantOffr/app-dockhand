@@ -70,6 +70,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       { id: "nav-fleet", group: "Navigation", label: "Fleet", sub: "All hosts at a glance", icon: "grid", hint: ["G", "F"], run: go("/") },
       { id: "nav-deploy", group: "Navigation", label: "Deploy", sub: "From GitHub or an image", icon: "rocket", hint: ["G", "D"], run: go("/deploy") },
       { id: "nav-resources", group: "Navigation", label: "All resources", sub: "Containers, stacks, images, volumes and networks on every host", keywords: "fleet everything containers images volumes networks stacks", icon: "layers", hint: ["G", "R"], run: go("/resources") },
+      { id: "nav-machines", group: "Navigation", label: "Machines", sub: "OS updates, hardening, services", keywords: "os apt packages patch security ssh firewall systemd baseline", icon: "shield", hint: ["G", "M"], run: go("/machines") },
       { id: "nav-uptime", group: "Navigation", label: "Uptime", sub: "Monitors and incidents", icon: "pulse", hint: ["G", "U"], run: go("/uptime") },
       { id: "nav-alerts", group: "Navigation", label: "Alerts", icon: "bell", hint: ["G", "A"], run: go("/alerts") },
       { id: "nav-settings", group: "Navigation", label: "Settings", sub: "Hosts", icon: "settings", hint: ["G", "S"], run: go("/settings/hosts") },
@@ -82,6 +83,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     list.push({ id: "custom-ssh", group: "Actions", label: "Custom SSH…", sub: "Open a terminal to any address", keywords: "ssh connect terminal remote server ip login", icon: "globe", run: () => shell.openDialog({ type: "customSsh" }) });
     for (const h of hosts ?? []) {
       list.push({ id: `host-${h.id}`, group: "Hosts", label: h.name, sub: `${h.address}${h.os ? ` · ${h.os}` : ""}`, keywords: h.status, avatar: { name: h.name, color: h.color, dot: hostStatusColor(h.status) }, run: go(`/hosts/${h.id}`) });
+      list.push({ id: `os-${h.id}`, group: "Hosts", label: `OS & security on ${h.name}`, sub: "updates, hardening, services", keywords: "apt patch machine kernel firewall", icon: "shield", run: () => router.push(`/machines?host=${h.id}`), searchOnly: true });
       list.push({ id: `ssh-${h.id}`, group: "Hosts", label: `Open SSH on ${h.name}`, sub: `${h.user}@${h.address}`, keywords: "shell terminal ssh console", icon: "terminal", run: () => shell.openTerminal({ kind: "shell", hostId: h.id }), searchOnly: true });
     }
     for (const c of containers ?? []) {

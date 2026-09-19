@@ -825,3 +825,107 @@ type RegistryTag struct {
 	Platforms []string   `json:"platforms"`
 	CreatedAt *time.Time `json:"createdAt"`
 }
+
+// ─── Machines (OS-level host management) ───────────────────────────────────
+
+// MachinePackage is an upgradable package.
+type MachinePackage struct {
+	Name      string `json:"name"`
+	Current   string `json:"current"`
+	Candidate string `json:"candidate"`
+	Origin    string `json:"origin"`
+	Security  bool   `json:"security"`
+}
+
+// MachineService is a systemd unit.
+type MachineService struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Active      string `json:"active"` // running | exited | failed | inactive | activating
+	Enabled     bool   `json:"enabled"`
+	Since       string `json:"since"`
+}
+
+// MachinePort is a listening TCP socket.
+type MachinePort struct {
+	Port    int    `json:"port"`
+	Address string `json:"address"`
+	Process string `json:"process"`
+	Public  bool   `json:"public"` // bound to a non-loopback address
+}
+
+// MachineCheck is one hardening check.
+type MachineCheck struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Sub      string `json:"sub"`
+	Status   string `json:"status"` // ok | bad | warn | unknown
+	Group    string `json:"group"`  // ssh | updates | network | services
+	Fix      string `json:"fix"`    // "" = not fixable from Dockhand
+	FixNote  string `json:"fixNote,omitempty"`
+	FixRisky bool   `json:"fixRisky,omitempty"`
+}
+
+// Machine is a host seen from the operating system side.
+type Machine struct {
+	HostID      string           `json:"hostId"`
+	Name        string           `json:"name"`
+	Color       string           `json:"color"`
+	Status      string           `json:"status"` // host status: online | offline | pending
+	Method      string           `json:"method"`
+	OS          string           `json:"os"`
+	Release     string           `json:"release"`
+	Kernel      string           `json:"kernel"`
+	Arch        string           `json:"arch"`
+	PkgManager  string           `json:"pkgManager"` // apt | none
+	UptimeSec   int              `json:"uptimeSec"`
+	Load        string           `json:"load"`
+	TempC       *float64         `json:"tempC"`
+	Reboot      bool             `json:"reboot"`
+	RebootPkgs  []string         `json:"rebootPkgs"`
+	Packages    []MachinePackage `json:"packages"`
+	Security    int              `json:"security"` // security updates among packages
+	Services    []MachineService `json:"services"`
+	Ports       []MachinePort    `json:"ports"`
+	Checks      []MachineCheck   `json:"checks"`
+	Sudo        bool             `json:"sudo"` // root or passwordless sudo
+	LastPatchAt *time.Time       `json:"lastPatchAt"`
+	AptUpdateAt *time.Time       `json:"aptUpdateAt"`
+	CollectedAt *time.Time       `json:"collectedAt"`
+	Error       string           `json:"error"`
+	Baselines   []string         `json:"baselines"` // baseline names this host belongs to
+	Drift       int              `json:"drift"`     // failing rules across those baselines
+}
+
+// Baseline is a named set of hardening rules applied to machines.
+type Baseline struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Color       string    `json:"color"`
+	Rules       []string  `json:"rules"`
+	HostIDs     []string  `json:"hostIds"`
+	CreatedAt   time.Time `json:"createdAt"`
+	// Computed
+	Compliance []BaselineRow `json:"compliance"`
+	Pct        int           `json:"pct"`
+	Drift      int           `json:"drift"`
+}
+
+// BaselineRow is one host's compliance with a baseline's rules.
+type BaselineRow struct {
+	HostID string            `json:"hostId"`
+	Name   string            `json:"name"`
+	Color  string            `json:"color"`
+	Status string            `json:"status"` // host status
+	Cells  map[string]string `json:"cells"`  // rule id → ok | bad | warn | unknown
+	Drift  int               `json:"drift"`
+}
+
+type BaselineInput struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Color       string   `json:"color"`
+	Rules       []string `json:"rules"`
+	HostIDs     []string `json:"hostIds"`
+}
