@@ -99,7 +99,11 @@ export interface ChartProps<Row extends object> {
   /** compact gauge: text in the middle (defaults to "N%"). */
   readonly centerLabel?: string;
   /** compact gauge: "ring" (360°) or "semi" (180° arc, v2 design). */
-  readonly variant?: "ring" | "semi";
+  readonly variant?: "ring" | "semi" | "spark";
+  /** compact spark: draw a dashed line at this value (e.g. the 85% "hot" mark). */
+  readonly threshold?: number;
+  /** compact spark: scale maximum (default 100). */
+  readonly sparkMax?: number;
   /** compact donut: centre sub-label under centerLabel. */
   readonly centerSub?: string;
   /** compact donut / treemap: hovered index changes (controlled highlight). */
@@ -1220,6 +1224,54 @@ function CompactSemi({ value, color: stroke, label }: { value: number; color: st
   );
 }
 
+/**
+ * Sparkline with an area fill, a dashed threshold line and a live dot on the
+ * last point (the fleet pulse panel). Values are percentages by default.
+ */
+function CompactSpark({ values, color: stroke, threshold, max }: { values: readonly number[]; color: string; threshold?: number; max: number }) {
+  const W = 240;
+  const H = 64;
+  const pad = 4;
+  const n = values.length;
+  const y = (v: number) => H - pad - (clamp(v, 0, max) / (max || 1)) * (H - pad * 2);
+  const x = (i: number) => (n <= 1 ? W : (i / (n - 1)) * W);
+  const pts = values.map((v, i) => [x(i), y(v)] as const);
+  // Smooth the line with midpoint quadratics, like the design's curve.
+  let d = "";
+  if (pts.length === 1) d = `M0 ${r1(pts[0][1])} L${W} ${r1(pts[0][1])}`;
+  else if (pts.length > 1) {
+    d = `M${r1(pts[0][0])} ${r1(pts[0][1])}`;
+    for (let i = 1; i < pts.length; i++) {
+      const [px, py] = pts[i - 1];
+      const [cx, cy] = pts[i];
+      const mx = (px + cx) / 2;
+      d += ` Q${r1(px)} ${r1(py)} ${r1(mx)} ${r1((py + cy) / 2)}`;
+      if (i === pts.length - 1) d += ` L${r1(cx)} ${r1(cy)}`;
+    }
+  }
+  const area = d ? `${d} L${W} ${H} L0 ${H} Z` : "";
+  const last = pts[pts.length - 1];
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: "block", width: "100%", height: "100%", overflow: "visible", color: stroke }}>
+      <defs>
+        <linearGradient id="gSparkFade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="currentColor" stopOpacity=".32" />
+          <stop offset="1" stopColor="currentColor" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {threshold !== undefined && <line x1="0" x2={W} y1={r1(y(threshold))} y2={r1(y(threshold))} stroke="#ff5f57" strokeWidth="1" strokeDasharray="3 4" opacity=".45" vectorEffect="non-scaling-stroke" />}
+      {area && <path d={area} fill="url(#gSparkFade)" style={{ transition: "d .8s" }} />}
+      {d && <path d={d} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" style={{ transition: "d .8s" }} />}
+      {last && (
+        <>
+          <circle cx={r1(last[0])} cy={r1(last[1])} r="4" fill={stroke} stroke="var(--card)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+          <circle cx={r1(last[0])} cy={r1(last[1])} r="4" fill="none" stroke={stroke} strokeWidth="1.5" vectorEffect="non-scaling-stroke" style={{ animation: "sparkPulse 2.4s ease-out infinite", transformOrigin: `${r1(last[0])}px ${r1(last[1])}px` }} />
+        </>
+      )}
+    </svg>
+  );
+}
+
 /** Segmented donut (v2 fleet card): hover a segment to emphasise it. */
 function CompactDonut({ values, colors, hi, setHi, onClick, center, sub }: { values: readonly number[]; colors: readonly string[]; hi: number | null; setHi: (i: number | null) => void; onClick: (i: number) => void; center: string; sub: string }) {
   const R = 42;
@@ -1548,6 +1600,15 @@ function ChartRoot<Row extends object>(props: ChartProps<Row>) {
             center={props.centerLabel ?? fmt(values.reduce((a, b) => a + b, 0))}
             sub={props.centerSub ?? ""}
           />
+        </div>
+      );
+    }
+    if (type === "area" || type === "line") {
+      const values = rows.map((o) => num(o[k]));
+      const col = props.colorOf ? props.colorOf(data[0], 0) : "var(--s1)";
+      return (
+        <div className={["graphite-chart", className].filter(Boolean).join(" ")} role={props.role ?? "img"} aria-label={props["aria-label"] ?? title} style={box}>
+          <CompactSpark values={values} color={col} threshold={props.threshold} max={props.sparkMax ?? 100} />
         </div>
       );
     }

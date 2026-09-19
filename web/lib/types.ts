@@ -644,6 +644,13 @@ export interface SystemInfo {
 
 // ─── Overview (fleet page + palette) ───────────────────────────────────────
 
+/** Fleet-wide load history behind the pulse panel (/api/fleet/metrics). */
+export interface FleetMetrics {
+  points: { at: ISODate; cpu: number; mem: number; disk: number }[];
+  avg: { at: ISODate; cpu: number; mem: number; disk: number };
+  prev: { at: ISODate; cpu: number; mem: number; disk: number };
+}
+
 export interface Overview {
   hosts: number;
   online: number;

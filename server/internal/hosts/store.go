@@ -309,6 +309,54 @@ func (s *Store) Metrics(ctx context.Context, id string, rng time.Duration) ([]mo
 	return out, rows.Err()
 }
 
+// FleetMetrics averages every host's samples over a window, bucketed for a
+// sparkline, plus the averages for this window and the one before it (the trend).
+func (s *Store) FleetMetrics(ctx context.Context, rng time.Duration) (model.FleetMetrics, error) {
+	out := model.FleetMetrics{Points: []model.MetricPoint{}}
+	bucket := int64(rng.Seconds() / 48)
+	if bucket < 60 {
+		bucket = 60
+	}
+	rows, err := s.db.Query(ctx, `SELECT to_timestamp(floor(extract(epoch from at) / $2) * $2) AS b,
+		avg(cpu), avg(mem), avg(disk) FROM host_metrics WHERE at > now() - make_interval(secs => $1)
+		GROUP BY b ORDER BY b`, rng.Seconds(), bucket)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var p model.MetricPoint
+		if err := rows.Scan(&p.At, &p.CPU, &p.Mem, &p.Disk); err != nil {
+			return out, err
+		}
+		p.CPU, p.Mem, p.Disk = round1(p.CPU), round1(p.Mem), round1(p.Disk)
+		out.Points = append(out.Points, p)
+	}
+	if err := rows.Err(); err != nil {
+		return out, err
+	}
+	avg := func(from, to float64) (model.MetricPoint, error) {
+		var p model.MetricPoint
+		var cpu, mem, disk *float64
+		err := s.db.QueryRow(ctx, `SELECT avg(cpu), avg(mem), avg(disk) FROM host_metrics
+			WHERE at > now() - make_interval(secs => $1) AND at <= now() - make_interval(secs => $2)`, from, to).Scan(&cpu, &mem, &disk)
+		if err != nil {
+			return p, err
+		}
+		if cpu != nil {
+			p.CPU, p.Mem, p.Disk = round1(*cpu), round1(*mem), round1(*disk)
+		}
+		return p, nil
+	}
+	if out.Avg, err = avg(rng.Seconds(), 0); err != nil {
+		return out, err
+	}
+	if out.Prev, err = avg(rng.Seconds()*2, rng.Seconds()); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
 // PruneMetrics deletes samples older than 48 h.
 func (s *Store) PruneMetrics(ctx context.Context) error {
 	_, err := s.db.Exec(ctx, `DELETE FROM host_metrics WHERE at < now() - interval '48 hours'`)

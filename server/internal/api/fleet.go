@@ -71,6 +71,22 @@ func gather[T any](s *Server, w http.ResponseWriter, r *http.Request, fetch func
 	ok(w, out)
 }
 
+// fleetMetrics is the fleet-wide load history behind the pulse panel.
+func (s *Server) fleetMetrics(w http.ResponseWriter, r *http.Request) {
+	rng := parseRange(r.URL.Query().Get("range"), 24*time.Hour)
+	if rng > 24*time.Hour {
+		rng = 24 * time.Hour
+	}
+	ctx, cancel := reqCtx(r, 15*time.Second)
+	defer cancel()
+	m, err := s.Hosts.FleetMetrics(ctx, rng)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	ok(w, m)
+}
+
 func (s *Server) fleetStacks(w http.ResponseWriter, r *http.Request) { gather(s, w, r, s.Stacks.List) }
 func (s *Server) fleetImages(w http.ResponseWriter, r *http.Request) { gather(s, w, r, s.Ops.Images) }
 func (s *Server) fleetVolumes(w http.ResponseWriter, r *http.Request) {

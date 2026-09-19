@@ -53,6 +53,14 @@ browser ──► api (Go, :8080 → host :5773)
 | `docs/API.md` | HTTP/WebSocket/MCP API reference (types in `web/lib/types.ts`) |
 | `design/` | The source design (`Dockhand.dc.html`) |
 
+### Fleet
+
+The home page opens with an alert ticker, then **Fleet pulse**: average CPU, memory or disk across the
+reachable hosts, the last 24 hours as a sparkline with a dashed line at 85%, a bar per host, and **Next best
+actions** — crashed or unhealthy containers, hosts that are full, image and OS updates, pending reboots and
+failing hardening checks, worst first. Each action opens the page that fixes it, or can be snoozed for a day.
+Below that are the fleet donut and one card per host.
+
 ### All resources
 
 **All resources** (spine, `G R`) lists every container, stack, image, volume and network across all hosts,

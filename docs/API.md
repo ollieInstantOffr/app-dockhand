@@ -39,6 +39,7 @@ Response shapes are defined in [`web/lib/types.ts`](../web/lib/types.ts); names 
 | GET | `/api/overview` | – | `Overview` |
 |---|---|---|---|
 | GET | `/api/containers` | – | `Container[]` across all hosts (cached from the poller; for palette + pickers) |
+| GET | `/api/fleet/metrics?range=24h` | – | `FleetMetrics`: every host's load averaged and bucketed, plus this window's and the previous window's averages (the fleet pulse) |
 | GET | `/api/fleet/stacks` · `/images` · `/volumes` · `/networks` | – | `FleetList<T>`: `{items: {hostId, hostName, item}[], errors, skipped}` — the per-host list from every reachable host, in parallel; a failing host lands in `errors`, offline ones in `skipped` |
 | GET | `/api/machines` | – | `Machine[]`: OS facts, packages, services, ports and hardening checks per host |
 | GET | `/api/machines/:id[?refresh=1]` | – | One `Machine`, optionally scanned first |

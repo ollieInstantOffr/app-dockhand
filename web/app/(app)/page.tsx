@@ -9,6 +9,7 @@ import { EmptyState, Skel } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { useShell } from "@/components/shell/context";
 import { HoverStyles } from "@/components/host/HoverStyles";
+import { FleetPulse } from "@/components/fleet/FleetPulse";
 import { FleetDonut } from "@/components/charts/FleetDonut";
 import { SemiGauge } from "@/components/charts/SemiGauge";
 import { InkStatus, gaugeColor, hostBigColor, hostDot, hostStatusShort, stoppedText } from "@/components/host/bits";
@@ -101,6 +102,8 @@ export default function FleetPage() {
       </div>
 
       {ticker.length > 0 && !empty && <AlertTicker alerts={ticker} />}
+
+      {hosts && hosts.length > 0 && <FleetPulse hosts={hosts} containers={containers} />}
 
       {loading && (
         <div style={GRID}>

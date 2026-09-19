@@ -49,6 +49,7 @@ func (s *Server) registerAPI(r chi.Router) {
 	r.Post("/registries/credentials", s.saveRegistryCredential)
 	r.Post("/registries/credentials/test", s.testRegistryCredential)
 	r.Delete("/registries/credentials/{cid}", s.deleteRegistryCredential)
+	r.Get("/fleet/metrics", s.fleetMetrics)
 	r.Get("/fleet/stacks", s.fleetStacks)
 	r.Get("/fleet/images", s.fleetImages)
 	r.Get("/fleet/volumes", s.fleetVolumes)

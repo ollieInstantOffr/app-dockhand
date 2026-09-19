@@ -107,6 +107,14 @@ type MetricPoint struct {
 	Disk float64   `json:"disk"`
 }
 
+// FleetMetrics is every host's load averaged together: a bucketed series for
+// the fleet pulse sparkline, this window's averages and the previous window's.
+type FleetMetrics struct {
+	Points []MetricPoint `json:"points"`
+	Avg    MetricPoint   `json:"avg"`
+	Prev   MetricPoint   `json:"prev"`
+}
+
 // ─── Containers ────────────────────────────────────────────────────────────
 
 type PortMap struct {
