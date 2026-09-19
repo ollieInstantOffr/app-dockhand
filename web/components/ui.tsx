@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Icon, type IconName } from "./icons";
 import { avatarBg, initial } from "@/lib/format";
 import { RingGauge } from "./charts/RingGauge";
@@ -376,18 +377,27 @@ export function HostTargets({ hosts, value, onChange }: { hosts: Host[]; value: 
 
 // ─── Dialog shell ──────────────────────────────────────────────────────────
 
+/**
+ * Modal dialog. It renders into <body> so that an ancestor with a transform
+ * (every page's "rise" animation) can't become its containing block and clip
+ * the fixed overlay.
+ */
 export function Dialog({ onClose, width = 460, children, top }: { onClose: () => void; width?: number; children: ReactNode; top?: boolean }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, [onClose]);
-  return (
+  if (!mounted) return null;
+  return createPortal(
     <div className="dialog-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()} style={top ? { placeItems: "start center", paddingTop: "10vh" } : undefined}>
       <div className="dialog" style={{ width: `min(${width}px, 100%)` }} onMouseDown={(e) => e.stopPropagation()}>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
