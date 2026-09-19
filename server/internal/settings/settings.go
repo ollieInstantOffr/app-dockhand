@@ -80,10 +80,19 @@ type Settings struct {
 	MCP           MCP           `json:"mcp"`
 	Updates       Updates       `json:"updates"`
 	Notifications Notifications `json:"notifications"`
+	Registry      Registry      `json:"registry"`
+}
+
+// Registry configures Dockhand's built-in image registry.
+type Registry struct {
+	Enabled bool `json:"enabled"`
+	// Address is how hosts and clients reach the registry ("dockhand.lan:5773");
+	// "" = the host and port of the public URL.
+	Address string `json:"address"`
 }
 
 // Sections lists the section keys stored in the settings table.
-var Sections = []string{"general", "uptime", "github", "mcp", "updates", "notifications"}
+var Sections = []string{"general", "uptime", "github", "mcp", "updates", "notifications", "registry"}
 
 // ToolInfo describes an MCP tool for default preferences.
 type ToolInfo struct {
@@ -273,6 +282,10 @@ func validate(s *Settings) error {
 	case "pull", "build":
 	default:
 		return fmt.Errorf("updates.build must be pull or build")
+	}
+	s.Registry.Address = strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(s.Registry.Address), "https://"), "http://"), "/")
+	if strings.ContainsAny(s.Registry.Address, "/ ") {
+		return fmt.Errorf("registry.address must be a host or host:port, e.g. dockhand.lan:5773")
 	}
 	s.Updates.Timezone = strings.TrimSpace(s.Updates.Timezone)
 	if s.Updates.Timezone != "" {

@@ -578,6 +578,10 @@ export interface Settings {
     composeFile: string;
     timezone: string; // IANA zone the window is read in; "" = the server's zone
   };
+  registry: {
+    enabled: boolean;
+    address: string; // "" = host:port of the public URL
+  };
   notifications: {
     hostDown: boolean;
     containerCrash: boolean;
@@ -727,4 +731,49 @@ export interface FleetList<T> {
   items: { hostId: ID; hostName: string; item: T }[];
   errors: { hostId: ID; hostName: string; error: string }[]; // hosts that failed to answer
   skipped: { hostId: ID; hostName: string; error: string }[]; // offline / pending hosts
+}
+
+// ─── Registries ────────────────────────────────────────────────────────────
+
+export interface RegistryInfo {
+  enabled: boolean;
+  address: string; // docker login / tag / push target, e.g. "dockhand.lan:5773"
+  secure: boolean; // served over https
+  reachable: boolean;
+  error?: string;
+  repos: number;
+  size: number; // bytes, -1 unknown
+}
+
+export interface RegistryRepo {
+  name: string;
+  tags: number;
+  latest: string; // tag to deploy by default
+}
+
+export interface RegistryTag {
+  tag: string;
+  digest: string;
+  size: number;
+  platforms: string[];
+  createdAt: ISODate | null;
+}
+
+export interface RegistryToken {
+  id: ID;
+  name: string;
+  prefix: string;
+  scope: "pull" | "push";
+  system: boolean; // Dockhand's own token for hosts
+  lastUsedAt: ISODate | null;
+  createdAt: ISODate;
+  token?: string; // only right after creation
+}
+
+export interface RegistryCredential {
+  id: ID;
+  server: string;
+  username: string;
+  lastUsedAt: ISODate | null;
+  createdAt: ISODate;
 }

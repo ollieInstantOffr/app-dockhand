@@ -18,6 +18,7 @@ import (
 	"dockhand/internal/hosts"
 	"dockhand/internal/jobs"
 	"dockhand/internal/model"
+	"dockhand/internal/regauth"
 	"dockhand/internal/util"
 )
 
@@ -41,7 +42,11 @@ func NormalizeRef(ref string) string {
 func (s *Service) Pull(ctx context.Context, conn *hosts.Conn, ref string, log func(level, text string)) error {
 	ref = NormalizeRef(ref)
 	log("cmd", "$ docker pull "+ref)
-	rd, err := conn.Docker().ImagePull(ctx, ref, image.PullOptions{})
+	auth := regauth.Encoded(ctx, ref)
+	if auth != "" {
+		log("muted", "using saved credentials for "+regauth.HostOf(ref))
+	}
+	rd, err := conn.Docker().ImagePull(ctx, ref, image.PullOptions{RegistryAuth: auth})
 	if err == nil {
 		err = streamPull(rd, log)
 		rd.Close()

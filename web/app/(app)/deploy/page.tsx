@@ -35,18 +35,19 @@ function Deploy() {
   const q = params.get("mode");
   const [mode, setMode] = useState<Mode>(q === "image" || q === "compose" ? q : "git");
   const hostParam = params.get("host") ?? "";
+  const imageParam = params.get("image") ?? "";
   const [host, setHost] = useState(hostParam);
   const [nonce, setNonce] = useState(0);
   // Arriving again with a different ?mode / ?host (e.g. from the "+" menu while already here) restarts the flow.
-  const lastParams = useRef(`${q}|${hostParam}`);
+  const lastParams = useRef(`${q}|${hostParam}|${imageParam}`);
   useEffect(() => {
-    const key = `${q}|${hostParam}`;
+    const key = `${q}|${hostParam}|${imageParam}`;
     if (key === lastParams.current) return;
     lastParams.current = key;
     if (q === "image" || q === "compose" || q === "git") setMode(q);
     setHost(hostParam);
     setNonce((n) => n + 1);
-  }, [q, hostParam]);
+  }, [q, hostParam, imageParam]);
   const accounts = useApi<GitAccount[]>("/api/github/accounts");
   const acct = accounts.data?.find((a) => a.enabled) ?? accounts.data?.[0];
   const others = (accounts.data?.length ?? 0) - 1;
@@ -58,7 +59,7 @@ function Deploy() {
     setMode(m);
     const sp = new URLSearchParams(params.toString());
     sp.set("mode", m);
-    lastParams.current = `${m}|${hostParam}`; // our own URL change — don't restart twice
+    lastParams.current = `${m}|${hostParam}|${imageParam}`; // our own URL change — don't restart twice
     router.replace(`${pathname}?${sp.toString()}`, { scroll: false });
   };
 
@@ -99,7 +100,7 @@ function Deploy() {
       />
 
       {mode === "git" && <GitFlow key={`git${nonce}`} initialHost={host} />}
-      {mode === "image" && <ImageFlow key={`image${nonce}`} initialHost={host} />}
+      {mode === "image" && <ImageFlow key={`image${nonce}`} initialHost={host} initialImage={imageParam} />}
       {mode === "compose" && <ComposeFlow key={`compose${nonce}`} initialHost={host} />}
     </section>
   );

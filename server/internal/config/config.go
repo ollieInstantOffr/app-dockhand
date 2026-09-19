@@ -17,6 +17,7 @@ type Config struct {
 	Listen      string
 	WebURL      string
 	PublicURL   string
+	RegistryURL string // Dockhand's built-in registry service (compose "registry")
 	StacksDir   string
 	BackupsDir  string
 	Version     string
@@ -46,6 +47,7 @@ func Load() *Config {
 		Listen:              env("DOCKHAND_LISTEN", ":8080"),
 		WebURL:              env("DOCKHAND_WEB_URL", "http://web:3000"),
 		PublicURL:           strings.TrimRight(env("DOCKHAND_PUBLIC_URL", "http://localhost:5773"), "/"),
+		RegistryURL:         strings.TrimRight(env("DOCKHAND_REGISTRY_URL", "http://registry:5000"), "/"),
 		StacksDir:           strings.TrimRight(env("DOCKHAND_STACKS_DIR", "/opt/dockhand/stacks"), "/"),
 		BackupsDir:          strings.TrimRight(env("DOCKHAND_BACKUPS_DIR", "/opt/dockhand/backups"), "/"),
 		Version:             env("DOCKHAND_VERSION", Version),

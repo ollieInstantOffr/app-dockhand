@@ -78,6 +78,27 @@ Compose stacks created through Dockhand live in `/opt/dockhand/stacks/<name>` on
 must be installed there. Deploys from GitHub stream the repository tarball through Dockhand, so hosts need
 neither git nor your token.
 
+### Registries
+
+**Private registries** (Settings → Registries): save a login for Docker Hub, GHCR, GitLab, Quay or any other
+registry and Dockhand uses it for pulls, compose deploys (including builds) and update checks on every host.
+Hosts are never logged in — each docker command gets a temporary `DOCKER_CONFIG` (the host's own config plus the
+saved logins) that is deleted when it finishes.
+
+**Built-in registry**: Dockhand can host images itself. The `registry` service in `docker-compose.yml` (CNCF
+distribution, not published) is served at `/v2/` on Dockhand's own port once turned on in Settings → Registries:
+
+```bash
+docker login dockhand.lan:5773            # Dockhand username + password, or any username + an access token
+docker tag myapp:latest dockhand.lan:5773/myapp:1.0
+docker push dockhand.lan:5773/myapp:1.0
+```
+
+Hosts pull with a read-only token Dockhand manages. Access tokens (push or pull-only) are for CI. Browse, deploy
+and delete images in Settings → Registries; **Reclaim space** garbage-collects layers no tag uses. Docker only
+talks to HTTP registries listed in `insecure-registries` (`/etc/docker/daemon.json`), except on localhost — serve
+Dockhand over HTTPS to avoid configuring hosts.
+
 ### GitHub
 
 Personal access tokens work out of the box. For the OAuth device flow set `GITHUB_OAUTH_CLIENT_ID`; for a

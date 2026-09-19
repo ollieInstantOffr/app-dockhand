@@ -10,6 +10,8 @@ import (
 
 	"dockhand/internal/alerts"
 	"dockhand/internal/model"
+
+	"dockhand/internal/regauth"
 )
 
 func (m *Monitor) updateLoop(ctx context.Context) {
@@ -91,7 +93,7 @@ func (m *Monitor) CheckUpdates(ctx context.Context, hostID string, only ...strin
 		if err != nil || len(ins.RepoDigests) == 0 {
 			return // locally built or unknown — can't compare
 		}
-		dist, err := cli.DistributionInspect(cctx, ref, "")
+		dist, err := cli.DistributionInspect(cctx, ref, regauth.Encoded(cctx, ref))
 		if err != nil {
 			return
 		}

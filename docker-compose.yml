@@ -35,6 +35,25 @@ services:
     environment:
       DOCKHAND_API_URL: http://api:8080
 
+  # Dockhand's built-in image registry (CNCF distribution). Not published: the API
+  # serves it at /v2/ on DOCKHAND_PORT with Dockhand logins and tokens in front.
+  # Turn it on in Settings → Registries.
+  registry:
+    image: registry:3
+    restart: unless-stopped
+    labels:
+      dockhand.role: registry
+    environment:
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+      REGISTRY_HTTP_RELATIVEURLS: "true"
+      # Keeps resumable uploads valid across registry restarts.
+      REGISTRY_HTTP_SECRET: ${DOCKHAND_SECRET:?set DOCKHAND_SECRET in .env}
+      OTEL_TRACES_EXPORTER: none
+      REGISTRY_LOG_LEVEL: warn
+      REGISTRY_LOG_ACCESSLOG_DISABLED: "true"
+    volumes:
+      - registry:/var/lib/registry
+
   # Go API: the public entrypoint (UI proxy, REST, WebSockets, MCP, webhooks).
   api:
     build:
@@ -55,6 +74,7 @@ services:
       DOCKHAND_MCP_PORT: ${DOCKHAND_MCP_PORT:-}
       DOCKHAND_STACKS_DIR: /opt/dockhand/stacks
       DOCKHAND_BACKUPS_DIR: /opt/dockhand/backups
+      DOCKHAND_REGISTRY_URL: http://registry:5000
       GITHUB_OAUTH_CLIENT_ID: ${GITHUB_OAUTH_CLIENT_ID:-}
       GITHUB_APP_ID: ${GITHUB_APP_ID:-}
       GITHUB_APP_SLUG: ${GITHUB_APP_SLUG:-}
@@ -77,3 +97,4 @@ services:
 
 volumes:
   pgdata:
+  registry:

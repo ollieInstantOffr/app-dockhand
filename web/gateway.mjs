@@ -1,5 +1,5 @@
 // Front door for the web container. Pages go to the Next.js standalone server
-// (on NEXT_PORT); /api, /mcp and the MCP OAuth endpoints — including WebSocket upgrades for terminals and
+// (on NEXT_PORT); /api, /mcp, /v2 (image registry) and the MCP OAuth endpoints — including WebSocket upgrades for terminals and
 // live logs — go straight to the Go API. The API container is the usual
 // entrypoint, but this keeps the app fully working when the web container is
 // reached directly (e.g. via an OrbStack / Docker Desktop container domain).
@@ -14,7 +14,8 @@ const API_PORT = Number(api.port || 80);
 
 const toApi = (url = "") =>
   url.startsWith("/api/") || url === "/api" || url === "/mcp" || url.startsWith("/mcp/") || url.startsWith("/mcp?") ||
-  url.startsWith("/oauth/") || url.startsWith("/.well-known/oauth-");
+  url.startsWith("/oauth/") || url.startsWith("/.well-known/oauth-") ||
+  url === "/v2" || url.startsWith("/v2/"); // the built-in image registry
 
 function forwardedHeaders(req) {
   const h = { ...req.headers };

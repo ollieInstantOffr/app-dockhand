@@ -351,3 +351,33 @@ model UpdateHistory {
 
   @@map("update_history")
 }
+
+// ─── Registries ────────────────────────────────────────────────────────────
+
+// Credentials for private registries (Docker Hub, GHCR, GitLab, self-hosted…),
+// used for pulls, compose deploys and update checks on every host.
+model RegistryCredential {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  server      String    @unique // "docker.io", "ghcr.io", "registry.example.com:5000"
+  username    String
+  passwordEnc String    @map("password_enc") // encrypted password or access token
+  lastUsedAt  DateTime? @map("last_used_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("registry_credentials")
+}
+
+// Access tokens for Dockhand's built-in registry (docker login with any username + the token).
+model RegistryToken {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String
+  prefix     String // first chars shown in the UI
+  hash       String    @unique // sha256 of the token
+  scope      String    @default("pull") // pull | push
+  system     Boolean   @default(false) // Dockhand's own token for hosts pulling images
+  lastUsedAt DateTime? @map("last_used_at") @db.Timestamptz
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("registry_tokens")
+}

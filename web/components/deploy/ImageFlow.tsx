@@ -6,7 +6,7 @@ import { Icon } from "@/components/icons";
 import { useShell } from "@/components/shell/context";
 import { errMsg, post, useApi } from "@/lib/api";
 import { AVATAR_COLORS, bytes } from "@/lib/format";
-import type { Container, DeployCheckInput, DeployIssue, DryRunResult, Host, JobRef, KV, Network, RunContainerInput, Settings } from "@/lib/types";
+import type { Container, DeployCheckInput, DeployIssue, DryRunResult, Host, JobRef, KV, Network, RegistryInfo, RegistryRepo, RunContainerInput, Settings } from "@/lib/types";
 import { BackButton, BigButton, ChipButton, DeployStepper, DryRunButton, EnvImport, IssuesPanel, PairRows, SummaryRow, cardStyle, deployBtnLabel, hashColor, mergeKV, useDeployCheck, type Pair } from "./shared";
 import { DeployProgress } from "./DeployProgress";
 
@@ -63,9 +63,10 @@ const PRESETS: { name: string; image: string; color: string }[] = [
 
 type Job = { id: string; name: string; hostId: string; hostName: string };
 
-export function ImageFlow({ initialHost }: { initialHost: string }) {
-  const [step, setStep] = useState(0);
-  const [image, setImage] = useState("");
+export function ImageFlow({ initialHost, initialImage = "" }: { initialHost: string; initialImage?: string }) {
+  // ?image=… (e.g. "Deploy" on a registry tag) skips straight to configuring it.
+  const [step, setStep] = useState(initialImage ? 1 : 0);
+  const [image, setImage] = useState(initialImage);
   const [job, setJob] = useState<Job | null>(null);
   return (
     <>
@@ -113,7 +114,7 @@ export function ImageFlow({ initialHost }: { initialHost: string }) {
 
 // ─── Step 1 ────────────────────────────────────────────────────────────────
 
-type HubHit = { name: string; description: string; stars: number; pulls: number; official: boolean };
+type HubHit = { name: string; description: string; stars: number; pulls: number; official: boolean; private?: boolean };
 
 function compact(n: number): string {
   if (n >= 1e9) return `${(n / 1e9).toFixed(1).replace(/\.0$/, "")}B`;
@@ -126,6 +127,12 @@ function ImagePicker({ value, onChange, onNext }: { value: string; onChange: (v:
   const input = useRef<HTMLInputElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const containers = useApi<Container[]>("/api/containers");
+  const settings = useApi<Settings>("/api/settings");
+  const regOn = !!settings.data?.registry?.enabled;
+  const regInfo = useApi<RegistryInfo>(regOn ? "/api/registry" : null, { revalidateOnFocus: false });
+  const regRepos = useApi<RegistryRepo[]>(regOn && regInfo.data?.reachable ? "/api/registry/repos" : null, { revalidateOnFocus: false });
+  const regAddr = regInfo.data?.address ?? "";
+  const registries = regAddr ? [{ id: "dockhand" as const, label: "Dockhand", prefix: regAddr }, ...REGISTRIES] : REGISTRIES;
 
   // Docker Hub search: plain terms without a registry host or tag ("postgres", "grafana/graf").
   const term = value.trim();
@@ -144,7 +151,7 @@ function ImagePicker({ value, onChange, onNext }: { value: string; onChange: (v:
   useOutside(wrap, () => setMenu(false), menu);
   useEffect(() => setHi(-1), [dq]);
   const [reg, rest] = splitRegistry(value.trim());
-  const active = reg === "" ? "hub" : reg === "ghcr.io" ? "ghcr" : reg === "quay.io" ? "quay" : "custom";
+  const active = reg === "" ? "hub" : regAddr && reg === regAddr ? "dockhand" : reg === "ghcr.io" ? "ghcr" : reg === "quay.io" ? "quay" : "custom";
 
   const presets = useMemo(() => {
     const counts = new Map<string, { image: string; n: number }>();
@@ -164,8 +171,8 @@ function ImagePicker({ value, onChange, onNext }: { value: string; onChange: (v:
     return [...used, ...popularStatic];
   }, [containers.data]);
 
-  const pickRegistry = (id: (typeof REGISTRIES)[number]["id"]) => {
-    const r = REGISTRIES.find((x) => x.id === id)!;
+  const pickRegistry = (id: (typeof registries)[number]["id"]) => {
+    const r = registries.find((x) => x.id === id)!;
     const next = r.prefix ? `${r.prefix}/${rest}` : rest;
     onChange(next);
     requestAnimationFrame(() => {
@@ -222,7 +229,7 @@ function ImagePicker({ value, onChange, onNext }: { value: string; onChange: (v:
             {showMenu && (
               <div className="menu" role="listbox" style={{ left: 0, right: 0, top: 52, maxHeight: 360, overflow: "auto" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px 4px", fontSize: 10.5, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--ink-3)" }}>
-                  Docker Hub
+                  {hits.some((h) => h.private) ? "Your registry & Docker Hub" : "Docker Hub"}
                   {searching && <span className="spinner" style={{ width: 10, height: 10, marginLeft: "auto" }} />}
                 </div>
                 {!searching && !hits.length && <div style={{ padding: "8px 10px", fontSize: 12.5, color: "var(--ink-3)" }}>No images match “{term}” — press Enter to use it as typed.</div>}
@@ -241,14 +248,17 @@ function ImagePicker({ value, onChange, onNext }: { value: string; onChange: (v:
                       <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
                         <span className="mono ellipsis" style={{ fontSize: 12.5 }}>{h.name}</span>
                         {h.official && <span className="tag blue" style={{ fontSize: 9.5, padding: "1px 6px" }}>official</span>}
+                        {h.private && <span className="tag ok" style={{ fontSize: 9.5, padding: "1px 6px" }}>your registry</span>}
                       </span>
                       {h.description && <span className="ellipsis" style={{ fontSize: 11.5, fontWeight: 400, color: "var(--ink-3)" }}>{h.description}</span>}
                     </span>
-                    <span className="mono" style={{ fontSize: 10.5, fontWeight: 400, color: "var(--ink-3)", whiteSpace: "nowrap", textAlign: "right" }}>
-                      ★ {compact(h.stars)}
-                      <br />
-                      {compact(h.pulls)} pulls
-                    </span>
+                    {!h.private && (
+                      <span className="mono" style={{ fontSize: 10.5, fontWeight: 400, color: "var(--ink-3)", whiteSpace: "nowrap", textAlign: "right" }}>
+                        ★ {compact(h.stars)}
+                        <br />
+                        {compact(h.pulls)} pulls
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -257,7 +267,7 @@ function ImagePicker({ value, onChange, onNext }: { value: string; onChange: (v:
         </form>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <span style={{ fontSize: 12, color: "var(--ink-3)" }}>Registry</span>
-          {REGISTRIES.map((r) => (
+          {registries.map((r) => (
             <ChipButton key={r.id} on={active === r.id} onClick={() => pickRegistry(r.id)}>
               {r.label}
             </ChipButton>
@@ -270,6 +280,32 @@ function ImagePicker({ value, onChange, onNext }: { value: string; onChange: (v:
           )}
         </div>
       </Card>
+      {regAddr && (regRepos.data?.length ?? 0) > 0 && (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink-2)" }}>In your registry</span>
+            <span style={{ flex: 1, height: 1, background: "var(--line-2)" }} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(min(100%,220px),1fr))", gap: 12 }}>
+            {regRepos.data!.slice(0, 8).map((r) => {
+              const img = `${regAddr}/${r.name}:${r.latest || "latest"}`;
+              return (
+                <button key={r.name} type="button" className="dh-lift" onClick={() => onNext(img)} style={{ textAlign: "left", border: 0, borderRadius: 18, background: "var(--surface)", boxShadow: "var(--card-shadow)", padding: "14px 16px", cursor: "pointer", color: "var(--ink)", display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ width: 38, height: 38, borderRadius: 12, background: "var(--btn)", color: "var(--btn-ink)", display: "grid", placeItems: "center", flex: "none" }}>
+                    <Icon name="layers" size={17} />
+                  </span>
+                  <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                    <span className="ellipsis" style={{ fontSize: 14, fontWeight: 700 }}>{r.name.split("/").pop()}</span>
+                    <span className="mono ellipsis" style={{ fontSize: 10.5, color: "var(--ink-3)" }}>
+                      {r.name}:{r.latest} · {r.tags} tag{r.tags === 1 ? "" : "s"}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink-2)" }}>Popular on your hosts</span>
         <span style={{ flex: 1, height: 1, background: "var(--line-2)" }} />

@@ -11,6 +11,7 @@ import { HostsTab } from "@/components/settings/HostsTab";
 import { GithubTab } from "@/components/settings/GithubTab";
 import { McpTab } from "@/components/settings/McpTab";
 import { UpdatesTab } from "@/components/settings/UpdatesTab";
+import { RegistriesTab } from "@/components/settings/RegistriesTab";
 import { NotificationsTab } from "@/components/settings/NotificationsTab";
 import { AccountTab } from "@/components/settings/AccountTab";
 import { SettingsStyles, useSettings } from "@/components/settings/common";
@@ -19,6 +20,7 @@ const TABS = [
   { value: "hosts", label: "Hosts", icon: "server" },
   { value: "github", label: "GitHub", icon: "branch" },
   { value: "mcp", label: "MCP", icon: "mcp" },
+  { value: "registries", label: "Registries", icon: "layers" },
   { value: "updates", label: "Updates", icon: "update" },
   { value: "notifications", label: "Notifications", icon: "bell" },
   { value: "account", label: "Account", icon: "user" },
@@ -49,6 +51,7 @@ export default function SettingsPage() {
           {tab === "hosts" && <HostsTab />}
           {tab === "github" && <GithubTab />}
           {tab === "mcp" && <McpTab />}
+          {tab === "registries" && <RegistriesTab />}
           {tab === "updates" && <UpdatesTab />}
           {tab === "notifications" && <NotificationsTab />}
           {tab === "account" && <AccountTab />}

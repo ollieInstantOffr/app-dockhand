@@ -34,6 +34,8 @@ import (
 	"dockhand/internal/mcptools"
 	"dockhand/internal/model"
 	"dockhand/internal/monitor"
+	"dockhand/internal/regauth"
+	"dockhand/internal/registry"
 	"dockhand/internal/secret"
 	"dockhand/internal/settings"
 	"dockhand/internal/sshkeys"
@@ -228,6 +230,11 @@ func run(cfg *config.Config) error {
 	mcpProvider := mcptools.New(pool, st, hostStore, mon, ops, stackSvc, gitSvc, jobRunner)
 	sysSvc := system.New(cfg, pool, st, jobRunner)
 	sysSvc.RecordBoot(rootCtx)
+	regSvc := registry.New(cfg, pool, box, st, authSvc, jobRunner)
+	if err := regSvc.EnsureSystemToken(rootCtx); err != nil {
+		slog.Warn("registry system token", "err", err)
+	}
+	regauth.Src = regSvc
 	sysSvc.OnAutoUpdate = func(target, jobID string) {
 		alertEngine.Event(context.Background(), alerts.Spec{Key: "auto_update:" + jobID, Severity: "info", Kind: "self_update",
 			Title: "Dockhand is updating itself to " + target, Text: "Automatic update inside the update window. Dockhand restarts in a minute or two.",
@@ -274,7 +281,7 @@ func run(cfg *config.Config) error {
 
 	handler, err := api.New(api.Deps{Cfg: cfg, DB: pool, Auth: authSvc, Settings: st, Hosts: hostStore, Conns: conns, Monitor: mon,
 		Ops: ops, Stacks: stackSvc, Jobs: jobRunner, Git: gitSvc, Uptime: upSvc, Alerts: alertEngine, MCP: mcpProvider,
-		System: sysSvc, HostKey: hostKey, DeployKey: deployKey, Preflight: deploycheck.New(hostStore, ops, stackSvc, mon)})
+		System: sysSvc, Registry: regSvc, HostKey: hostKey, DeployKey: deployKey, Preflight: deploycheck.New(hostStore, ops, stackSvc, mon)})
 	if err != nil {
 		return err
 	}

@@ -771,3 +771,57 @@ type DryRunResult struct {
 	Command string `json:"command"`
 	Output  string `json:"output"`
 }
+
+// ─── Registries ─────────────────────────────────────────────────────────────
+
+// RegistryCredential is a saved login for a private registry (password never returned).
+type RegistryCredential struct {
+	ID         string     `json:"id"`
+	Server     string     `json:"server"`
+	Username   string     `json:"username"`
+	LastUsedAt *time.Time `json:"lastUsedAt"`
+	CreatedAt  time.Time  `json:"createdAt"`
+}
+
+type RegistryCredentialInput struct {
+	Server   string `json:"server"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// RegistryToken is an access token for Dockhand's built-in registry.
+type RegistryToken struct {
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	Prefix     string     `json:"prefix"`
+	Scope      string     `json:"scope"` // pull | push
+	System     bool       `json:"system"`
+	LastUsedAt *time.Time `json:"lastUsedAt"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	Token      string     `json:"token,omitempty"` // only when just created
+}
+
+// RegistryInfo describes Dockhand's built-in registry.
+type RegistryInfo struct {
+	Enabled   bool   `json:"enabled"`
+	Address   string `json:"address"`   // what to docker login / tag with
+	Secure    bool   `json:"secure"`    // reached over HTTPS (no insecure-registries entry needed)
+	Reachable bool   `json:"reachable"` // the registry service answers
+	Error     string `json:"error,omitempty"`
+	Repos     int    `json:"repos"`
+	Size      int64  `json:"size"` // bytes on disk, -1 if unknown
+}
+
+type RegistryRepo struct {
+	Name   string `json:"name"`
+	Tags   int    `json:"tags"`
+	Latest string `json:"latest"` // "latest" when present, else the last tag by name
+}
+
+type RegistryTag struct {
+	Tag       string     `json:"tag"`
+	Digest    string     `json:"digest"`
+	Size      int64      `json:"size"` // compressed layers + config; for multi-platform images, the first platform's
+	Platforms []string   `json:"platforms"`
+	CreatedAt *time.Time `json:"createdAt"`
+}

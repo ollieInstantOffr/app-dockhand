@@ -720,6 +720,15 @@ func ComposeFileArgs(label string) string {
 // RunLogged runs a command on the host streaming output into the job log.
 func RunLogged(ctx context.Context, conn *hosts.Conn, j *jobs.Job, cmd string) error {
 	j.Log("cmd", "$ "+cmd)
+	if strings.Contains(cmd, "docker compose") || strings.Contains(cmd, "docker pull") || strings.Contains(cmd, "docker build") {
+		wrapped, cleanup, err := withRegistryConfig(ctx, conn, cmd)
+		if err != nil {
+			j.Logf("warn", "couldn't pass saved registry credentials to the host: %v", err)
+		} else {
+			defer cleanup()
+			cmd = wrapped
+		}
+	}
 	var last []string
 	code, err := conn.ExecStream(ctx, cmd, nil, func(stream, line string) {
 		if strings.TrimSpace(line) == "" {

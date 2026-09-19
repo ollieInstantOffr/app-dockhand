@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"dockhand/internal/model"
+	"dockhand/internal/regauth"
 )
 
 var registryHTTP = &http.Client{Timeout: 12 * time.Second}
@@ -82,7 +83,7 @@ func Tags(ctx context.Context, img string) []TagInfo {
 	var resp struct {
 		Tags []string `json:"tags"`
 	}
-	if getJSON(ctx, "https://"+ref.Registry+"/v2/"+ref.Repo+"/tags/list?n=200", tok, &resp) == nil {
+	if getJSON(ctx, registryBase(ref)+"/v2/"+ref.Repo+"/tags/list?n=200", tok, &resp) == nil {
 		sort.Sort(sort.Reverse(sort.StringSlice(resp.Tags)))
 		for i, t := range resp.Tags {
 			if i >= 50 {
@@ -101,6 +102,7 @@ type SearchResult struct {
 	Stars       int    `json:"stars"`
 	Pulls       int64  `json:"pulls"`
 	Official    bool   `json:"official"`
+	Private     bool   `json:"private,omitempty"` // from Dockhand's own registry
 }
 
 // Search queries Docker Hub's public repository search. Best effort: errors yield an empty list.
@@ -149,7 +151,7 @@ func InspectRemote(ctx context.Context, img string) InspectResult {
 	res := InspectResult{ExposedPorts: []string{}, Volumes: []string{}, Env: []model.KV{}}
 	ref := ParseImageRef(img)
 	tok := registryToken(ctx, ref)
-	base := "https://" + ref.Registry + "/v2/" + ref.Repo
+	base := registryBase(ref) + "/v2/" + ref.Repo
 	accept := strings.Join([]string{
 		"application/vnd.oci.image.index.v1+json",
 		"application/vnd.docker.distribution.manifest.list.v2+json",
@@ -223,8 +225,24 @@ func InspectRemote(ctx context.Context, img string) InspectResult {
 	return res
 }
 
-// registryToken fetches an anonymous pull token via the registry's WWW-Authenticate challenge.
+// registryBase is where Dockhand talks to ref's registry: its own registry
+// service directly, otherwise https://<registry>.
+func registryBase(ref ImageRef) string {
+	if u := regauth.Internal(ref.Registry + "/x"); u != "" {
+		return u
+	}
+	return "https://" + ref.Registry
+}
+
+// registryToken returns an Authorization value for reading ref from its
+// registry: a pull token from the WWW-Authenticate challenge (with saved
+// credentials when there are any), Basic auth for registries that ask for it,
+// or "" for none.
 func registryToken(ctx context.Context, ref ImageRef) string {
+	if regauth.Internal(ref.Registry+"/x") != "" {
+		return "" // Dockhand's own registry, reached directly
+	}
+	basic := regauth.BasicHeader(ctx, ref.Registry+"/x")
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+ref.Registry+"/v2/", nil)
 	resp, err := registryHTTP.Do(req)
 	if err != nil {
@@ -232,6 +250,9 @@ func registryToken(ctx context.Context, ref ImageRef) string {
 	}
 	resp.Body.Close()
 	ch := resp.Header.Get("Www-Authenticate")
+	if strings.HasPrefix(strings.ToLower(ch), "basic") {
+		return basic
+	}
 	if !strings.HasPrefix(strings.ToLower(ch), "bearer ") {
 		return ""
 	}
@@ -255,13 +276,16 @@ func registryToken(ctx context.Context, ref ImageRef) string {
 		Token       string `json:"token"`
 		AccessToken string `json:"access_token"`
 	}
-	if err := getJSON(ctx, realm+"?"+q.Encode(), "", &tok); err != nil {
+	if err := getJSON(ctx, realm+"?"+q.Encode(), basic, &tok); err != nil {
 		return ""
 	}
 	if tok.Token != "" {
-		return tok.Token
+		return "Bearer " + tok.Token
 	}
-	return tok.AccessToken
+	if tok.AccessToken != "" {
+		return "Bearer " + tok.AccessToken
+	}
+	return ""
 }
 
 func splitChallenge(s string) []string {
@@ -298,7 +322,8 @@ func getJSONAccept(ctx context.Context, u, token, accept string, dst any) error 
 	req.Header.Set("Accept", accept)
 	req.Header.Set("User-Agent", "Dockhand")
 	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
+		// token is a full Authorization value ("Bearer …" / "Basic …").
+		req.Header.Set("Authorization", token)
 	}
 	resp, err := registryHTTP.Do(req)
 	if err != nil {

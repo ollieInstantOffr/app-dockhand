@@ -339,7 +339,19 @@ func (s *Server) imageSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := reqCtx(r, 10*time.Second)
 	defer cancel()
-	ok(w, dockerops.Search(ctx, q, 8))
+	// Images in Dockhand's own registry come first.
+	out := []dockerops.SearchResult{}
+	if info := s.Settings.Get().Registry; info.Enabled {
+		if repos, err := s.Registry.Repos(ctx); err == nil {
+			addr := s.Registry.Address()
+			for _, rp := range repos {
+				if strings.Contains(strings.ToLower(rp.Name), strings.ToLower(q)) && len(out) < 5 {
+					out = append(out, dockerops.SearchResult{Name: addr + "/" + rp.Name, Description: fmt.Sprintf("In Dockhand's registry · %d tag%s", rp.Tags, map[bool]string{true: "", false: "s"}[rp.Tags == 1]), Private: true})
+				}
+			}
+		}
+	}
+	ok(w, append(out, dockerops.Search(ctx, q, 8)...))
 }
 
 func (s *Server) imageInspect(w http.ResponseWriter, r *http.Request) {

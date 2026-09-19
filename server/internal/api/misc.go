@@ -401,6 +401,7 @@ type settingsView struct {
 	MCP           settings.MCP           `json:"mcp"`
 	Updates       settings.Updates       `json:"updates"`
 	Notifications settings.Notifications `json:"notifications"`
+	Registry      settings.Registry      `json:"registry"`
 }
 
 func (s *Server) settingsView(st settings.Settings) settingsView {
@@ -412,7 +413,7 @@ func (s *Server) settingsView(st settings.Settings) settingsView {
 			masked += sec[len(sec)-4:]
 		}
 	}
-	return settingsView{General: st.General, Uptime: st.Uptime, MCP: st.MCP, Updates: st.Updates, Notifications: st.Notifications,
+	return settingsView{General: st.General, Uptime: st.Uptime, MCP: st.MCP, Updates: st.Updates, Notifications: st.Notifications, Registry: st.Registry,
 		GitHub: githubView{AutoDeploy: st.GitHub.AutoDeploy, WaitChecks: st.GitHub.WaitChecks, OnlyCompose: st.GitHub.OnlyCompose,
 			WebhookURL: strings.TrimRight(st.General.PublicURL, "/") + "/api/webhooks/github", WebhookSecret: masked,
 			AppConfigured: s.Cfg.AppConfigured(), OAuthConfigured: s.Cfg.GitHubOAuthClientID != "", AppInstallURL: s.Git.AppInstallURL()}}

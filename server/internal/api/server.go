@@ -31,6 +31,7 @@ import (
 	"dockhand/internal/mcp"
 	"dockhand/internal/mcptools"
 	"dockhand/internal/monitor"
+	"dockhand/internal/registry"
 	"dockhand/internal/settings"
 	"dockhand/internal/sshkeys"
 	"dockhand/internal/stacks"
@@ -56,6 +57,7 @@ type Deps struct {
 	Alerts    *alerts.Engine
 	MCP       *mcptools.Provider
 	System    *system.Service
+	Registry  *registry.Service
 	HostKey   *sshkeys.Key
 	DeployKey *sshkeys.Key
 }
@@ -68,6 +70,7 @@ type Server struct {
 // New builds the root handler.
 func New(d Deps) (http.Handler, error) {
 	s := &Server{Deps: d}
+	d.Registry.IP = clientIP
 	target, err := url.Parse(d.Cfg.WebURL)
 	if err != nil {
 		return nil, fmt.Errorf("DOCKHAND_WEB_URL: %w", err)
@@ -99,6 +102,9 @@ func (s *Server) routes() http.Handler {
 	r.Use(recoverer, requestLogger)
 
 	mcpHandler := mcp.NewHandler(s.MCP, "dockhand", s.Cfg.Version)
+	// Dockhand's built-in image registry (its own auth; no cookies or CSRF).
+	r.Handle("/v2", s.Registry)
+	r.Handle("/v2/*", s.Registry)
 	r.Handle("/mcp", mcpHandler)
 	r.Handle("/mcp/*", mcpHandler)
 	s.registerOAuth(r)

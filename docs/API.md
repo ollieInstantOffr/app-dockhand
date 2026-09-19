@@ -40,6 +40,16 @@ Response shapes are defined in [`web/lib/types.ts`](../web/lib/types.ts); names 
 |---|---|---|---|
 | GET | `/api/containers` | – | `Container[]` across all hosts (cached from the poller; for palette + pickers) |
 | GET | `/api/fleet/stacks` · `/images` · `/volumes` · `/networks` | – | `FleetList<T>`: `{items: {hostId, hostName, item}[], errors, skipped}` — the per-host list from every reachable host, in parallel; a failing host lands in `errors`, offline ones in `skipped` |
+| GET | `/api/registry` | – | `RegistryInfo` for the built-in registry |
+| GET | `/api/registry/repos` · `/api/registry/tags?repo=` | – | `RegistryRepo[]` · `RegistryTag[]` (newest first) |
+| DELETE | `/api/registry/tags?repo=&tag=` | – | Delete the image a tag points to (every tag sharing its digest) |
+| POST | `/api/registry/gc` | – | `JobRef`: garbage-collect unreferenced layers, then restart the registry |
+| GET/POST | `/api/registry/tokens` | `{name, scope: "pull"\|"push"}` | Access tokens; the new token's secret is returned once |
+| DELETE | `/api/registry/tokens/:id` | – | Revoke (the system token can't be revoked) |
+| GET/POST | `/api/registries/credentials` | `{server, username, password}` | Saved logins for other registries (password never returned; POST replaces a server's login) |
+| POST | `/api/registries/credentials/test[?id=]` | `{server, username, password}` | `{ok, error?}` — logs in without saving |
+| DELETE | `/api/registries/credentials/:id` | – | Remove a saved login |
+| * | `/v2/*` | Basic auth | Docker registry API (built-in registry): Dockhand user = push, `dhr_…` tokens by scope |
 
 ## Hosts
 
