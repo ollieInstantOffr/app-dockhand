@@ -103,7 +103,7 @@ export default function FleetPage() {
 
       {ticker.length > 0 && !empty && <AlertTicker alerts={ticker} />}
 
-      {hosts && hosts.length > 0 && <FleetPulse hosts={hosts} containers={containers} />}
+      {hosts && hosts.length > 0 && <FleetPulse hosts={hosts} containers={containers} alerts={ticker} />}
 
       {loading && (
         <div style={GRID}>
@@ -183,12 +183,16 @@ function AlertTicker({ alerts }: { alerts: Alert[] }) {
         {plural(alerts.length, "alert")}
       </span>
       <span style={{ width: 1, height: 20, background: "rgba(127,127,127,.35)", flex: "none" }} />
-      <div
+      <button
+        type="button"
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
-        style={{ flex: 1, minWidth: 0, overflow: "hidden", position: "relative", height: 34, maskImage: "linear-gradient(90deg,transparent,#000 24px,#000 calc(100% - 24px),transparent)", WebkitMaskImage: "linear-gradient(90deg,transparent,#000 24px,#000 calc(100% - 24px),transparent)" }}
+        onClick={() => setPaused((p) => !p)}
+        title={paused ? "Let the alerts scroll again" : "Hold the alerts still"}
+        aria-label={paused ? "Resume scrolling alerts" : "Pause scrolling alerts"}
+        style={{ flex: 1, minWidth: 0, overflow: "hidden", position: "relative", height: 34, border: 0, padding: 0, background: "transparent", cursor: "default", maskImage: "linear-gradient(90deg,transparent,#000 24px,#000 calc(100% - 24px),transparent)", WebkitMaskImage: "linear-gradient(90deg,transparent,#000 24px,#000 calc(100% - 24px),transparent)" }}
       >
-        <div style={{ position: "absolute", left: 0, top: 0, display: "flex", alignItems: "center", gap: 6, width: "max-content", animation: `ticker ${dur} linear infinite`, animationPlayState: paused ? "paused" : "running" }}>
+        <div className="tick-strip" style={{ position: "absolute", left: 0, top: 0, display: "flex", alignItems: "center", gap: 6, width: "max-content", animation: `ticker ${dur} linear infinite`, animationPlayState: paused ? "paused" : "running" }}>
           {loop.map((a, i) => {
             const solid = severityColor(a.severity);
             return (
@@ -209,7 +213,7 @@ function AlertTicker({ alerts }: { alerts: Alert[] }) {
             );
           })}
         </div>
-      </div>
+      </button>
       <button onClick={openNotifications} style={{ height: 36, padding: "0 14px", borderRadius: 18, border: 0, background: "var(--btn-ink)", color: "var(--btn)", fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flex: "none" }}>
         Open inbox
       </button>

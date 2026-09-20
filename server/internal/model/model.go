@@ -350,6 +350,7 @@ type Job struct {
 	Title      string         `json:"title"`
 	HostID     *string        `json:"hostId"`
 	Status     string         `json:"status"`
+	Actor      string         `json:"actor"` // who started it: a username, "auto-deploy", "auto-update"…
 	Steps      []JobStep      `json:"steps"`
 	Log        []JobLogLine   `json:"log"`
 	Result     map[string]any `json:"result"`

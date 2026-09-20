@@ -309,6 +309,7 @@ export interface Job {
   title: string;
   hostId: ID | null;
   status: "running" | "success" | "failed";
+  actor: string; // who started it: a username, "auto-deploy", "auto-update", ""
   steps: JobStep[];
   log: JobLogLine[];
   result: Record<string, unknown>; // e.g. { stack: "paperless", hostId, containerId }

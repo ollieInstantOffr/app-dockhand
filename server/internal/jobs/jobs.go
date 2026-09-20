@@ -342,7 +342,7 @@ func (j *Job) SetStack(id string) {
 func (j *Job) Snapshot() model.Job {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	out := model.Job{ID: j.id, Kind: j.spec.Kind, Title: j.spec.Title, Status: j.status,
+	out := model.Job{ID: j.id, Kind: j.spec.Kind, Title: j.spec.Title, Status: j.status, Actor: j.spec.Actor,
 		Steps: append([]model.JobStep{}, j.steps...), Log: append([]model.JobLogLine{}, j.log...),
 		Result: map[string]any{}, StartedAt: j.start, FinishedAt: j.finished}
 	for k, v := range j.result {
@@ -414,9 +414,9 @@ func (r *Runner) Get(ctx context.Context, id string) (model.Job, error) {
 	}
 	var out model.Job
 	var steps, logb, res []byte
-	err := r.db.QueryRow(ctx, `SELECT id::text, kind, title, host_id::text, status, steps, log, result, started_at, finished_at
+	err := r.db.QueryRow(ctx, `SELECT id::text, kind, title, host_id::text, status, coalesce(actor, ''), steps, log, result, started_at, finished_at
 		FROM deployments WHERE id::text = $1`, id).
-		Scan(&out.ID, &out.Kind, &out.Title, &out.HostID, &out.Status, &steps, &logb, &res, &out.StartedAt, &out.FinishedAt)
+		Scan(&out.ID, &out.Kind, &out.Title, &out.HostID, &out.Status, &out.Actor, &steps, &logb, &res, &out.StartedAt, &out.FinishedAt)
 	if err != nil {
 		if db.IsNoRows(err) {
 			return out, errors.New("job not found")
@@ -438,7 +438,7 @@ func (r *Runner) List(ctx context.Context, limit int) ([]model.Job, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 20
 	}
-	rows, err := r.db.Query(ctx, `SELECT id::text, kind, title, host_id::text, status, steps, result, started_at, finished_at
+	rows, err := r.db.Query(ctx, `SELECT id::text, kind, title, host_id::text, status, coalesce(actor, ''), steps, result, started_at, finished_at
 		FROM deployments ORDER BY started_at DESC LIMIT $1`, limit)
 	if err != nil {
 		return nil, err
@@ -448,7 +448,7 @@ func (r *Runner) List(ctx context.Context, limit int) ([]model.Job, error) {
 	for rows.Next() {
 		var j model.Job
 		var steps, res []byte
-		if err := rows.Scan(&j.ID, &j.Kind, &j.Title, &j.HostID, &j.Status, &steps, &res, &j.StartedAt, &j.FinishedAt); err != nil {
+		if err := rows.Scan(&j.ID, &j.Kind, &j.Title, &j.HostID, &j.Status, &j.Actor, &steps, &res, &j.StartedAt, &j.FinishedAt); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal(steps, &j.Steps)

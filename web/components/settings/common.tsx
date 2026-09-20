@@ -150,6 +150,8 @@ export function SettingsStyles() {
       .set-nav { position: sticky; top: 92px; border-radius: 24px; background: var(--btn); color: var(--btn-ink); box-shadow: 0 14px 44px rgba(20,24,40,.14); padding: 10px; display: flex; flex-direction: column; gap: 4px; }
       .set-nav-items { display: flex; flex-direction: column; gap: 4px; }
       .set-nav-item { display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border: 0; border-radius: 14px; background: transparent; color: var(--btn-ink); font-size: 13.5px; font-weight: 600; cursor: pointer; text-align: left; width: 100%; transition: background .2s; text-decoration: none; white-space: nowrap; }
+      .set-nav-group { padding: 12px 12px 2px; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--btn-ink); opacity: .45; }
+      .set-nav-items > div:first-child .set-nav-group { padding-top: 2px; }
       .set-nav-item:hover { background: rgba(127,127,127,.22); }
       .set-nav-item.on { background: rgba(127,127,127,.3); }
       .set-nav-item .set-nav-ic { display: flex; opacity: .6; }
@@ -178,7 +180,7 @@ export function SettingsStyles() {
         .set-nav::-webkit-scrollbar { display: none; }
         .set-nav-items { flex-direction: row; }
         .set-nav-item { width: auto; flex: none; height: 38px; gap: 8px; border-radius: 12px; }
-        .set-nav-div, .set-nav-foot { display: none; }
+        .set-nav-div, .set-nav-foot, .set-nav-group { display: none; }
       }
     `}</style>
   );

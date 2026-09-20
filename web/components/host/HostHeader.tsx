@@ -112,7 +112,7 @@ export function HostHeader({ host, containers }: { host: Host | undefined; conta
         </span>
         <ShellButton host={host} containers={containers} offline={offline} />
         <button
-          onClick={() => router.push(`/machines?host=${host.id}`)}
+          onClick={() => router.replace(`/hosts/${host.id}?tab=os`, { scroll: false })}
           title="Operating system updates, hardening and services"
           style={{ height: 36, padding: "0 14px", borderRadius: 12, border: 0, background: "rgba(127,127,127,.22)", color: "var(--btn-ink)", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap", flex: "none" }}
         >

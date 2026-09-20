@@ -419,5 +419,6 @@ textarea.input { height: auto; padding: 12px 14px; line-height: 1.6; resize: ver
 }
 .graphite-chart:focus-visible { outline: none; }
 @media (prefers-reduced-motion: reduce) {
+  .tick-strip, .sug-chip { animation: none !important }
   .graphite-chart * { transition: none !important; animation: none !important; }
 }

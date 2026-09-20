@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useApi } from "@/lib/api";
 import { C, avatarBg, bytes, initial, plural } from "@/lib/format";
-import type { Container, FleetMetrics, Host, Machine } from "@/lib/types";
+import type { Alert, Container, FleetMetrics, Host, Machine } from "@/lib/types";
+import { Icon } from "@/components/icons";
 import { PulseSpark } from "@/components/charts/PulseSpark";
 import type { PulseSparkDatum } from "@/components/charts/PulseSpark.types";
 
@@ -25,7 +26,7 @@ const level = (v: number) => (v >= HOT ? C.crit : v >= WARM ? C.warn : C.ok);
 const val = (h: Host, m: Metric) => (m === "cpu" ? h.cpu : m === "mem" ? h.mem : h.disk);
 const online = (h: Host) => h.status !== "offline" && h.status !== "pending";
 
-export function FleetPulse({ hosts, containers }: { hosts: Host[]; containers: Container[] | undefined }) {
+export function FleetPulse({ hosts, containers, alerts }: { hosts: Host[]; containers: Container[] | undefined; alerts: Alert[] }) {
   const router = useRouter();
   const [metric, setMetric] = useState<Metric>("cpu");
   const { data: fm } = useApi<FleetMetrics>("/api/fleet/metrics", { refresh: 60000, revalidateOnFocus: false });
@@ -50,7 +51,7 @@ export function FleetPulse({ hosts, containers }: { hosts: Host[]; containers: C
   const trendText = trendDelta == null ? (series.length ? "no history yet" : "collecting…") : "vs the day before";
 
   const rows = [...hosts].sort((a, b) => Number(online(b)) - Number(online(a)) || val(b, metric) - val(a, metric));
-  const suggestions = useSuggestions(hosts, containers, machines);
+  const suggestions = useSuggestions(hosts, containers, machines, alerts);
 
   return (
     <div style={{ borderRadius: 26, background: "var(--btn)", color: "var(--btn-ink)", boxShadow: "0 14px 40px rgba(20,24,40,.18)", padding: "22px 24px 18px", display: "flex", flexDirection: "column", gap: 16, marginBottom: 22, overflow: "hidden", animation: "rise .4s ease both" }}>
@@ -124,7 +125,7 @@ export function FleetPulse({ hosts, containers }: { hosts: Host[]; containers: C
       <span style={{ fontSize: 11.5, opacity: 0.55, padding: "2px 6px 0" }}>Red bars are over {HOT}%, amber over {WARM}%. Click a host to open it.</span>
 
       <NextActions suggestions={suggestions} />
-      <style>{`.pulse-row:hover{background:rgba(127,127,127,.16)}.sug-chip:hover{background:rgba(127,127,127,.34);transform:translateY(-1px)}.sug-x{opacity:0}.sug-chip:hover .sug-x{opacity:.65}`}</style>
+      <style>{`.pulse-row:hover{background:rgba(127,127,127,.16)}.sug-chip:hover{background:rgba(127,127,127,.34);transform:translateY(-1px)}`}</style>
     </div>
   );
 }
@@ -142,7 +143,7 @@ export interface Suggestion {
 const SEV_COLOR: Record<Suggestion["severity"], string> = { crit: "#ff5f57", warn: C.warn, info: C.blue };
 
 /** Everything worth doing next, worst first, with anything snoozed filtered out. */
-function useSuggestions(hosts: Host[], containers: Container[] | undefined, machines: Machine[] | undefined): { list: Suggestion[]; snoozed: number; snooze: (id: string) => void; reset: () => void } {
+function useSuggestions(hosts: Host[], containers: Container[] | undefined, machines: Machine[] | undefined, alerts: Alert[]): { list: Suggestion[]; snoozed: number; snooze: (id: string) => void; reset: () => void } {
   const [snoozedMap, setSnoozedMap] = useState<Record<string, number>>({});
   useEffect(() => {
     try {
@@ -192,9 +193,17 @@ function useSuggestions(hosts: Host[], containers: Container[] | undefined, mach
       if (bad > 0) out.push({ id: `hard:${m.hostId}`, severity: "warn", title: `${plural(bad, "hardening check")} failing on ${m.name}`, href: `/machines?host=${m.hostId}&tab=security` });
     }
 
+    // Anything already scrolling past in the alert ticker doesn't need saying twice.
+    const ticking = new Set((alerts ?? []).map((a) => `${a.kind}:${a.hostId ?? ""}`));
+    const covered = (s: Suggestion) => {
+      const host = s.id.split(":")[1] ?? "";
+      const kinds: Record<string, string> = { offline: "host_down", crashed: "container_crash", unhealthy: "unhealthy", disk: "disk_space" };
+      const kind = kinds[s.id.split(":")[0]];
+      return !!kind && ticking.has(`${kind}:${host}`);
+    };
     const rank = { crit: 0, warn: 1, info: 2 };
-    return out.sort((a, b) => rank[a.severity] - rank[b.severity]);
-  }, [hosts, containers, machines]);
+    return out.filter((s) => !covered(s)).sort((a, b) => rank[a.severity] - rank[b.severity]);
+  }, [hosts, containers, machines, alerts]);
 
   const list = all.filter((s) => !snoozedMap[s.id]);
   return {
@@ -222,14 +231,14 @@ function NextActions({ suggestions }: { suggestions: ReturnType<typeof useSugges
       </span>
       {!list.length && <span style={{ fontSize: 12.5, opacity: 0.7 }}>Nothing to do — the fleet is healthy.</span>}
       {shown.map((s) => (
-        <span key={s.id} className="sug-chip" style={{ display: "flex", alignItems: "center", gap: 9, height: 36, padding: "0 6px 0 10px", borderRadius: 18, background: "rgba(127,127,127,.22)", color: "var(--btn-ink)", fontSize: 12.5, whiteSpace: "nowrap", transition: "background .2s, transform .2s" }}>
+        <span key={s.id} className="sug-chip" style={{ display: "flex", alignItems: "center", gap: 9, height: 36, padding: "0 4px 0 10px", borderRadius: 18, background: "rgba(127,127,127,.22)", color: "var(--btn-ink)", fontSize: 12.5, whiteSpace: "nowrap", transition: "background .2s, transform .2s" }}>
           <button onClick={() => router.push(s.href)} style={{ display: "flex", alignItems: "center", gap: 9, border: 0, background: "transparent", color: "inherit", font: "inherit", cursor: "pointer", padding: 0 }}>
             <span style={{ width: 8, height: 8, borderRadius: "50%", background: SEV_COLOR[s.severity], boxShadow: `0 0 8px ${SEV_COLOR[s.severity]}`, flex: "none" }} />
             <span style={{ fontWeight: 600 }}>{s.title}</span>
             {s.gain && <span className="mono" style={{ fontSize: 11, opacity: 0.65 }}>{s.gain}</span>}
           </button>
-          <button className="sug-x" onClick={() => snooze(s.id)} title="Snooze for a day" aria-label={`Snooze ${s.title}`} style={{ width: 22, height: 22, borderRadius: "50%", border: 0, background: "transparent", color: "inherit", cursor: "pointer", display: "grid", placeItems: "center", fontSize: 13, lineHeight: 1, transition: "opacity .2s" }}>
-            ✕
+          <button onClick={() => snooze(s.id)} title="Snooze for a day" aria-label={`Snooze ${s.title} for a day`} style={{ width: 26, height: 26, borderRadius: "50%", border: 0, background: "rgba(127,127,127,.28)", color: "inherit", cursor: "pointer", display: "grid", placeItems: "center", flex: "none", opacity: 0.75 }}>
+            <Icon name="x" size={12} strokeWidth={2.4} />
           </button>
         </span>
       ))}

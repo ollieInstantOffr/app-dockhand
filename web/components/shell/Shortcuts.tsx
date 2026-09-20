@@ -24,7 +24,7 @@ const GROUPS: { title: string; items: { keys: string[]; label: string }[] }[] = 
     items: [
       { keys: ["G", "F"], label: "Fleet" },
       { keys: ["G", "D"], label: "Deploy" },
-      { keys: ["G", "R"], label: "All resources" },
+      { keys: ["G", "R"], label: "Resources" },
       { keys: ["G", "M"], label: "Machines" },
       { keys: ["G", "U"], label: "Uptime" },
       { keys: ["G", "A"], label: "Alerts" },

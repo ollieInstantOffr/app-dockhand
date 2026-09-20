@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { EmptyState, Seg, useOutside } from "@/components/ui";
 import { useShell } from "@/components/shell/context";
@@ -8,11 +8,19 @@ import { ALERT_FILTERS, alertSummary, markAllRead, markRead, snooze, type AlertF
 import { errMsg, useApi } from "@/lib/api";
 import { ago, halo, severityColor } from "@/lib/format";
 import type { Alert } from "@/lib/types";
+import { ActivityView } from "@/components/alerts/ActivityView";
+
+type View = "alerts" | "activity";
 
 export default function AlertsPage() {
   const shell = useShell();
   const router = useRouter();
+  const [view, setView] = useState<View>("alerts");
   const [filter, setFilter] = useState<AlertFilter>("all");
+  // ?view=activity (from the command palette) opens straight on the activity list.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("view") === "activity") setView("activity");
+  }, []);
   const { data: all } = useApi<Alert[]>("/api/alerts?filter=all", { refresh: 15000 });
   const { data: list, error } = useApi<Alert[]>(`/api/alerts?filter=${filter}`, { refresh: 15000 });
   const loading = !list && !error;
@@ -47,13 +55,22 @@ export default function AlertsPage() {
       <style>{".alert-row:hover,.alert-row:focus-within{z-index:5}"}</style>
       <div style={{ display: "flex", alignItems: "flex-end", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
         <div>
-          <h1 className="page-title">Alerts</h1>
-          <p className="page-sub">{alertSummary(all)}</p>
+          <h1 className="page-title">{view === "alerts" ? "Alerts" : "Activity"}</h1>
+          <p className="page-sub">{view === "alerts" ? alertSummary(all) : "Everything Dockhand has done, and who asked for it."}</p>
         </div>
-        <button type="button" className="btn2" style={{ marginLeft: "auto" }} onClick={readAll} disabled={!unread}>
-          Mark all read
-        </button>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <Seg<View> fit value={view} onChange={setView} options={[{ value: "alerts", label: "Alerts" }, { value: "activity", label: "Activity" }]} />
+          {view === "alerts" && (
+            <button type="button" className="btn2" onClick={readAll} disabled={!unread}>
+              Mark all read
+            </button>
+          )}
+        </div>
       </div>
+      {view === "activity" ? (
+        <ActivityView />
+      ) : (
+      <>
       <Seg fit options={ALERT_FILTERS} value={filter} onChange={setFilter} style={{ marginBottom: 16 }} />
 
       {loading ? (
@@ -112,6 +129,8 @@ export default function AlertsPage() {
             );
           })}
         </div>
+      )}
+      </>
       )}
     </section>
   );

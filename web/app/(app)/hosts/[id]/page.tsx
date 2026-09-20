@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { invalidate, post, useApi } from "@/lib/api";
 import { plural } from "@/lib/format";
-import type { Container, Host, Image, Network, Stack, Volume } from "@/lib/types";
+import type { Container, Host, Image, Machine, Network, Stack, Volume } from "@/lib/types";
 import { EmptyState, Tabs } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icons";
 import { useShell } from "@/components/shell/context";
@@ -17,10 +17,11 @@ import { StacksTab } from "@/components/host/StacksTab";
 import { StorageTab } from "@/components/host/StorageTab";
 import { NetworksTab } from "@/components/host/NetworksTab";
 import { trackJob } from "@/components/host/jobs";
+import { MachinePanel, type MachineTab } from "@/components/machines/MachinePanel";
 import type { JobRef } from "@/lib/types";
 
-type Tab = "containers" | "stacks" | "storage" | "networks";
-const TABS: Tab[] = ["containers", "stacks", "storage", "networks"];
+type Tab = "containers" | "stacks" | "storage" | "networks" | "os";
+const TABS: Tab[] = ["containers", "stacks", "storage", "networks", "os"];
 /** Old tab names that still arrive via alert links / bookmarks. */
 const TAB_ALIAS: Record<string, Tab> = { images: "storage", volumes: "storage" };
 
@@ -67,6 +68,8 @@ function HostView() {
     [params, pathname, router, view.q, view.status, view.stack, view.sort],
   );
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // The OS tab's own sub-tab (updates / security / services).
+  const [osTab, setOsTab] = useState<MachineTab>("updates");
 
   const base = `/api/hosts/${id}`;
   const { data: host, error: hostErr } = useApi<Host>(base, { refresh: 10000 });
@@ -77,6 +80,7 @@ function HostView() {
   const { data: images, error: imagesErr } = useApi<Image[]>(heavy ? `${base}/images` : null, { refresh: tab === "storage" ? 15000 : 60000 });
   const { data: volumes, error: volumesErr } = useApi<Volume[]>(heavy ? `${base}/volumes` : null, { refresh: tab === "storage" ? 15000 : 60000 });
   const { data: networks, error: networksErr } = useApi<Network[]>(heavy ? `${base}/networks` : null, { refresh: tab === "networks" ? 10000 : 60000 });
+  const { data: machine } = useApi<Machine>(heavy ? `/api/machines/${id}` : null, { refresh: tab === "os" ? 30000 : 120000 });
 
   // Drop selections that no longer exist.
   useEffect(() => {
@@ -131,9 +135,9 @@ function HostView() {
   }
 
   const updateCount = (containers ?? []).filter((c) => c.update?.available).length;
-  const icons: Record<Tab, IconName> = { containers: "box", stacks: "layers", storage: "disk", networks: "network" };
-  const labels: Record<Tab, string> = { containers: "Containers", stacks: "Stacks", storage: "Storage", networks: "Networks" };
-  const counts: Partial<Record<Tab, number | undefined>> = { containers: containers?.length, stacks: stacks?.length, storage: images && volumes ? images.length + volumes.length : undefined, networks: networks?.length };
+  const icons: Record<Tab, IconName> = { containers: "box", stacks: "layers", storage: "disk", networks: "network", os: "shield" };
+  const labels: Record<Tab, string> = { containers: "Containers", stacks: "Stacks", storage: "Storage", networks: "Networks", os: "OS & security" };
+  const counts: Partial<Record<Tab, number | undefined>> = { containers: containers?.length, stacks: stacks?.length, storage: images && volumes ? images.length + volumes.length : undefined, networks: networks?.length, os: machine ? (machine.packages.length || undefined) : undefined };
 
   const bulk = async (action: "start" | "restart" | "stop") => {
     const ids = [...selected];
@@ -212,7 +216,7 @@ function HostView() {
         </div>
 
         {/* A failed fetch shows an error card instead of an endless skeleton (offline hosts get the banner above). */}
-        {!offline && tabError(tab, { containers: !containers && ctrErr, stacks: !stacks && stacksErr, storage: (!images && imagesErr) || (!volumes && volumesErr), networks: !networks && networksErr }, base)}
+        {!offline && tabError(tab, { containers: !containers && ctrErr, stacks: !stacks && stacksErr, storage: (!images && imagesErr) || (!volumes && volumesErr), networks: !networks && networksErr, os: false }, base)}
         {tab === "containers" && containers && containers.length > 0 && (
           <ContainerFilters
             containers={containers}
@@ -226,6 +230,7 @@ function HostView() {
         {tab === "stacks" && !(!stacks && stacksErr) && <StacksTab hostId={id} stacks={stacks} />}
         {tab === "storage" && !((!images && imagesErr) || (!volumes && volumesErr)) && <StorageTab hostId={id} host={host} images={images} volumes={volumes} />}
         {tab === "networks" && !(!networks && networksErr) && <NetworksTab hostId={id} networks={networks} />}
+        {tab === "os" && <MachinePanel hostId={id} tab={osTab} onTab={(t) => setOsTab(t)} />}
       </div>
     </section>
   );
@@ -234,7 +239,7 @@ function HostView() {
 function tabError(tab: Tab, errs: Record<Tab, Error | false | undefined>, base: string) {
   const e = errs[tab];
   if (!e) return null;
-  const what: Record<Tab, string> = { containers: "containers", stacks: "stacks", storage: "images and volumes", networks: "networks" };
+  const what: Record<Tab, string> = { containers: "containers", stacks: "stacks", storage: "images and volumes", networks: "networks", os: "machine facts" };
   return (
     <EmptyState icon="alert" title={`Couldn't load ${what[tab]}`} text={e.message || "The host didn't answer. Dockhand keeps retrying in the background."}>
       <button className="btn2" style={{ height: 40 }} onClick={() => invalidate(base)}>

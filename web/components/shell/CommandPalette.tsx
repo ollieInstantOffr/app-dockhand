@@ -77,13 +77,15 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       { id: "nav-github", group: "Navigation", label: "Settings · GitHub", keywords: "git accounts repos", icon: "branch", run: go("/settings/github"), searchOnly: true },
       { id: "nav-mcp", group: "Navigation", label: "Settings · MCP", keywords: "api keys claude ai", icon: "mcp", run: go("/settings/mcp"), searchOnly: true },
       { id: "nav-notif", group: "Navigation", label: "Settings · Notifications", keywords: "channels email slack ntfy webhook", icon: "mail", run: go("/settings/notifications"), searchOnly: true },
+      { id: "nav-registries", group: "Navigation", label: "Settings · Registries", keywords: "registry images push pull docker login credentials ghcr token", icon: "layers", run: go("/settings/registries"), searchOnly: true },
+      { id: "nav-activity", group: "Navigation", label: "Activity", sub: "What Dockhand has done, and who asked", keywords: "jobs history log deploys audit who", icon: "logs", run: go("/alerts?view=activity"), searchOnly: true },
       { id: "nav-updates", group: "Navigation", label: "Settings · Updates", keywords: "self update version", icon: "update", run: go("/settings/updates"), searchOnly: true },
       { id: "nav-account", group: "Navigation", label: "Settings · Account", keywords: "password profile sessions", icon: "user", run: go("/settings/account"), searchOnly: true },
     ];
     list.push({ id: "custom-ssh", group: "Actions", label: "Custom SSH…", sub: "Open a terminal to any address", keywords: "ssh connect terminal remote server ip login", icon: "globe", run: () => shell.openDialog({ type: "customSsh" }) });
     for (const h of hosts ?? []) {
       list.push({ id: `host-${h.id}`, group: "Hosts", label: h.name, sub: `${h.address}${h.os ? ` · ${h.os}` : ""}`, keywords: h.status, avatar: { name: h.name, color: h.color, dot: hostStatusColor(h.status) }, run: go(`/hosts/${h.id}`) });
-      list.push({ id: `os-${h.id}`, group: "Hosts", label: `OS & security on ${h.name}`, sub: "updates, hardening, services", keywords: "apt patch machine kernel firewall", icon: "shield", run: () => router.push(`/machines?host=${h.id}`), searchOnly: true });
+      list.push({ id: `os-${h.id}`, group: "Hosts", label: `OS & security on ${h.name}`, sub: "updates, hardening, services", keywords: "apt patch machine kernel firewall", icon: "shield", run: () => router.push(`/hosts/${h.id}?tab=os`), searchOnly: true });
       list.push({ id: `ssh-${h.id}`, group: "Hosts", label: `Open SSH on ${h.name}`, sub: `${h.user}@${h.address}`, keywords: "shell terminal ssh console", icon: "terminal", run: () => shell.openTerminal({ kind: "shell", hostId: h.id }), searchOnly: true });
     }
     for (const c of containers ?? []) {

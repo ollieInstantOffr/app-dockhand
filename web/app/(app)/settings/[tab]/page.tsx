@@ -16,15 +16,18 @@ import { NotificationsTab } from "@/components/settings/NotificationsTab";
 import { AccountTab } from "@/components/settings/AccountTab";
 import { SettingsStyles, useSettings } from "@/components/settings/common";
 
+// Grouped so seven tabs read as three short lists.
 const TABS = [
-  { value: "hosts", label: "Hosts", icon: "server" },
-  { value: "github", label: "GitHub", icon: "branch" },
-  { value: "mcp", label: "MCP", icon: "mcp" },
-  { value: "registries", label: "Registries", icon: "layers" },
-  { value: "updates", label: "Updates", icon: "update" },
-  { value: "notifications", label: "Notifications", icon: "bell" },
-  { value: "account", label: "Account", icon: "user" },
-] as const satisfies readonly { value: string; label: string; icon: IconName }[];
+  { value: "hosts", label: "Hosts", icon: "server", group: "Infrastructure" },
+  { value: "registries", label: "Registries", icon: "layers", group: "Infrastructure" },
+  { value: "github", label: "GitHub", icon: "branch", group: "Integrations" },
+  { value: "mcp", label: "MCP", icon: "mcp", group: "Integrations" },
+  { value: "notifications", label: "Notifications", icon: "bell", group: "Integrations" },
+  { value: "updates", label: "Updates", icon: "update", group: "Dockhand" },
+  { value: "account", label: "Account", icon: "user", group: "Dockhand" },
+] as const satisfies readonly { value: string; label: string; icon: IconName; group: string }[];
+
+const GROUPS = ["Infrastructure", "Integrations", "Dockhand"] as const;
 
 type Tab = (typeof TABS)[number]["value"];
 
@@ -79,7 +82,10 @@ function SettingsNav({ tab }: { tab: Tab }) {
   return (
     <nav className="set-nav" aria-label="Settings">
       <div className="set-nav-items">
-        {TABS.map((t) => {
+        {GROUPS.map((g) => (
+          <div key={g} style={{ display: "contents" }}>
+            <span className="set-nav-group">{g}</span>
+            {TABS.filter((t) => t.group === g).map((t) => {
           const b = badge(t.value);
           const on = t.value === tab;
           return (
@@ -96,6 +102,8 @@ function SettingsNav({ tab }: { tab: Tab }) {
             </Link>
           );
         })}
+          </div>
+        ))}
       </div>
       <span className="set-nav-div" />
       <Link href="/settings/updates" scroll={false} className="set-nav-foot" title={sys?.updateAvailable ? `${ver(sys.latest)} is available` : undefined}>
