@@ -86,7 +86,12 @@ Compose stacks created through Dockhand live in `/opt/dockhand/stacks/<name>` on
 must be installed there. Deploys from GitHub stream the repository tarball through Dockhand, so hosts need
 neither git nor your token.
 
+**Alerts → Activity** lists every job Dockhand has run — deploys, updates, patches, backups, clean-ups — with who
+started it, how long it took, and its steps and output.
+
 ### Machines
+
+A host's own page has the same thing under **OS & security**; the Machines page is the fleet-wide view of it.
 
 **Machines** (spine, `G M`, or "OS & security" on a host page) manages the hosts themselves, over the same SSH
 connection: pending apt updates (install everything, only security, or a selection), systemd services,
