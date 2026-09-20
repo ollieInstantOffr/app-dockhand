@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useApi } from "@/lib/api";
+import { errMsg, post, useApi } from "@/lib/api";
 import { C, avatarBg, bytes, initial, plural } from "@/lib/format";
 import type { Alert, Container, FleetMetrics, Host, Machine } from "@/lib/types";
 import { Icon } from "@/components/icons";
+import { useShell } from "@/components/shell/context";
 import { PulseSpark } from "@/components/charts/PulseSpark";
 import type { PulseSparkDatum } from "@/components/charts/PulseSpark.types";
 
@@ -18,9 +19,9 @@ const METRICS: { id: Metric; label: string }[] = [
   { id: "mem", label: "Memory" },
   { id: "disk", label: "Disk" },
 ];
+const COLLAPSE_KEY = "dockhand.fleet.pulseOpen";
 const HOT = 85;
 const WARM = 70;
-const SNOOZE_KEY = "dockhand.fleet.snoozed";
 
 const level = (v: number) => (v >= HOT ? C.crit : v >= WARM ? C.warn : C.ok);
 const val = (h: Host, m: Metric) => (m === "cpu" ? h.cpu : m === "mem" ? h.mem : h.disk);
@@ -29,6 +30,25 @@ const online = (h: Host) => h.status !== "offline" && h.status !== "pending";
 export function FleetPulse({ hosts, containers, alerts }: { hosts: Host[]; containers: Container[] | undefined; alerts: Alert[] }) {
   const router = useRouter();
   const [metric, setMetric] = useState<Metric>("cpu");
+  // Folding the panel away is a per-device view preference, so it stays in this browser.
+  const [open, setOpen] = useState(true);
+  useEffect(() => {
+    try {
+      setOpen(localStorage.getItem(COLLAPSE_KEY) !== "0");
+    } catch {
+      /* storage unavailable */
+    }
+  }, []);
+  const toggle = () => {
+    setOpen((v) => {
+      try {
+        localStorage.setItem(COLLAPSE_KEY, v ? "0" : "1");
+      } catch {
+        /* storage unavailable */
+      }
+      return !v;
+    });
+  };
   const { data: fm } = useApi<FleetMetrics>("/api/fleet/metrics", { refresh: 60000, revalidateOnFocus: false });
   const { data: machines } = useApi<Machine[]>("/api/machines", { refresh: 120000, revalidateOnFocus: false });
 
@@ -57,7 +77,18 @@ export function FleetPulse({ hosts, containers, alerts }: { hosts: Host[]; conta
     <div style={{ borderRadius: 26, background: "var(--btn)", color: "var(--btn-ink)", boxShadow: "0 14px 40px rgba(20,24,40,.18)", padding: "22px 24px 18px", display: "flex", flexDirection: "column", gap: 16, marginBottom: 22, overflow: "hidden", animation: "rise .4s ease both" }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 24, flexWrap: "wrap" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 240, flex: 1 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", opacity: 0.6 }}>Fleet pulse</span>
+          <button
+            type="button"
+            onClick={toggle}
+            aria-expanded={open}
+            title={open ? "Fold the fleet pulse away" : "Show the fleet pulse"}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, alignSelf: "flex-start", border: 0, background: "transparent", padding: 0, color: "inherit", cursor: "pointer", fontSize: 11, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", opacity: 0.6 }}
+          >
+            <span style={{ display: "inline-flex", transform: open ? "rotate(90deg)" : undefined, transition: "transform .15s" }}>
+              <Icon name="chevronRight" size={12} />
+            </span>
+            Fleet pulse
+          </button>
           <span style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
             <span className="big-num" style={{ fontSize: 46, transition: "color .4s", color: live.length ? level(now) : "var(--btn-ink)" }}>{live.length ? `${Math.round(now)}%` : "—"}</span>
             <span style={{ fontSize: 14, fontWeight: 600, opacity: 0.8, whiteSpace: "nowrap" }}>{metricLabel}</span>
@@ -98,6 +129,7 @@ export function FleetPulse({ hosts, containers, alerts }: { hosts: Host[]; conta
         </div>
       </div>
 
+      {open && (
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,400px),1fr))", gap: "2px 36px" }}>
         {rows.map((h) => {
           const v = val(h, metric);
@@ -122,7 +154,8 @@ export function FleetPulse({ hosts, containers, alerts }: { hosts: Host[]; conta
           );
         })}
       </div>
-      <span style={{ fontSize: 11.5, opacity: 0.55, padding: "2px 6px 0" }}>Red bars are over {HOT}%, amber over {WARM}%. Click a host to open it.</span>
+      )}
+      {open && <span style={{ fontSize: 11.5, opacity: 0.55, padding: "2px 6px 0" }}>Red bars are over {HOT}%, amber over {WARM}%. Click a host to open it.</span>}
 
       <NextActions suggestions={suggestions} />
       <style>{`.pulse-row:hover{background:rgba(127,127,127,.16)}.sug-chip:hover{background:rgba(127,127,127,.34);transform:translateY(-1px)}`}</style>
@@ -144,22 +177,20 @@ const SEV_COLOR: Record<Suggestion["severity"], string> = { crit: "#ff5f57", war
 
 /** Everything worth doing next, worst first, with anything snoozed filtered out. */
 function useSuggestions(hosts: Host[], containers: Container[] | undefined, machines: Machine[] | undefined, alerts: Alert[]): { list: Suggestion[]; snoozed: number; snooze: (id: string) => void; reset: () => void } {
-  const [snoozedMap, setSnoozedMap] = useState<Record<string, number>>({});
-  useEffect(() => {
+  const shell = useShell();
+  // Snoozes are stored with the settings, like alert snoozes, so they follow you between browsers.
+  const { data: snoozedMap, mutate } = useApi<Record<string, string>>("/api/fleet/snoozed", { refresh: 300000 });
+  const write = async (body: { id: string; hours?: number }) => {
+    const optimistic = { ...(snoozedMap ?? {}) };
+    if (body.id) optimistic[body.id] = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+    else for (const k of Object.keys(optimistic)) delete optimistic[k];
+    mutate(optimistic, { revalidate: false });
     try {
-      const raw = JSON.parse(localStorage.getItem(SNOOZE_KEY) ?? "{}") as Record<string, number>;
-      const live = Object.fromEntries(Object.entries(raw).filter(([, until]) => until > Date.now()));
-      setSnoozedMap(live);
-    } catch {
-      /* storage unavailable */
-    }
-  }, []);
-  const write = (m: Record<string, number>) => {
-    setSnoozedMap(m);
-    try {
-      localStorage.setItem(SNOOZE_KEY, JSON.stringify(m));
-    } catch {
-      /* storage unavailable */
+      await post("/api/fleet/snoozed", { id: body.id, hours: body.hours ?? 24 });
+      mutate();
+    } catch (e) {
+      mutate();
+      shell.toast({ kind: "error", title: "Couldn't save that", text: errMsg(e) });
     }
   };
 
@@ -205,12 +236,12 @@ function useSuggestions(hosts: Host[], containers: Container[] | undefined, mach
     return out.filter((s) => !covered(s)).sort((a, b) => rank[a.severity] - rank[b.severity]);
   }, [hosts, containers, machines, alerts]);
 
-  const list = all.filter((s) => !snoozedMap[s.id]);
+  const list = all.filter((s) => !snoozedMap?.[s.id]);
   return {
     list,
     snoozed: all.length - list.length,
-    snooze: (id: string) => write({ ...snoozedMap, [id]: Date.now() + 24 * 3600 * 1000 }),
-    reset: () => write({}),
+    snooze: (id: string) => write({ id }),
+    reset: () => write({ id: "" }),
   };
 }
 

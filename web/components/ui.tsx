@@ -82,11 +82,11 @@ export function Seg<T extends string>({ options, value, onChange, size, fit, mon
 }
 
 /** Glass tab bar (host tabs, settings tabs, deploy modes). */
-export function Tabs<T extends string>({ items, value, onChange }: { items: { value: T; label: ReactNode; icon?: IconName; count?: number | string }[]; value: T; onChange: (v: T) => void }) {
+export function Tabs<T extends string>({ items, value, onChange }: { items: { value: T; label: ReactNode; icon?: IconName; count?: number | string; title?: string }[]; value: T; onChange: (v: T) => void }) {
   return (
     <div className="tabs">
       {items.map((t) => (
-        <button key={t.value} type="button" className={t.value === value ? "on" : ""} onClick={() => onChange(t.value)}>
+        <button key={t.value} type="button" title={t.title} className={t.value === value ? "on" : ""} onClick={() => onChange(t.value)}>
           {t.icon && <Icon name={t.icon} size={15} />}
           {t.label}
           {t.count != null && t.count !== 0 && <span className="tab-count">{t.count}</span>}
@@ -382,18 +382,65 @@ export function HostTargets({ hosts, value, onChange }: { hosts: Host[]; value: 
  * (every page's "rise" animation) can't become its containing block and clip
  * the fixed overlay.
  */
-export function Dialog({ onClose, width = 460, children, top }: { onClose: () => void; width?: number; children: ReactNode; top?: boolean }) {
+/** DialogHeader's heading names the dialog for screen readers. */
+const DIALOG_TITLE_ID = "dockhand-dialog-title";
+
+export function Dialog({ onClose, width = 460, children, top, label }: { onClose: () => void; width?: number; children: ReactNode; top?: boolean; label?: string }) {
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const box = useRef<HTMLDivElement>(null);
+  // Whatever had focus when the dialog opened, so it can be handed back.
+  const opener = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", k);
-    return () => window.removeEventListener("keydown", k);
-  }, [onClose]);
+    opener.current = document.activeElement as HTMLElement | null;
+    setMounted(true);
+  }, []);
+
+  // Focus starts inside and comes back to the opener when the dialog closes.
+  useEffect(() => {
+    if (!mounted) return;
+    const focusables = () =>
+      [...(box.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') ?? [])].filter(
+        (el) => el.offsetParent !== null,
+      );
+    const list = focusables();
+    (list.find((el) => !el.hasAttribute("data-dialog-close")) ?? list[0])?.focus();
+    return () => opener.current?.focus?.();
+  }, [mounted]);
+
+  // Escape closes; Tab stays within the dialog.
+  useEffect(() => {
+    if (!mounted) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const list = [...(box.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') ?? [])].filter((el) => el.offsetParent !== null);
+      if (!list.length) return;
+      const firstEl = list[0];
+      const lastEl = list[list.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (!box.current?.contains(active)) {
+        e.preventDefault();
+        firstEl.focus();
+      } else if (e.shiftKey && active === firstEl) {
+        e.preventDefault();
+        lastEl.focus();
+      } else if (!e.shiftKey && active === lastEl) {
+        e.preventDefault();
+        firstEl.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [mounted, onClose]);
+
   if (!mounted) return null;
   return createPortal(
     <div className="dialog-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()} style={top ? { placeItems: "start center", paddingTop: "10vh" } : undefined}>
-      <div className="dialog" style={{ width: `min(${width}px, 100%)` }} onMouseDown={(e) => e.stopPropagation()}>
+      <div ref={box} className="dialog" role="dialog" aria-modal="true" aria-label={label} aria-labelledby={label ? undefined : DIALOG_TITLE_ID} style={{ width: `min(${width}px, 100%)` }} onMouseDown={(e) => e.stopPropagation()}>
         {children}
       </div>
     </div>,
@@ -408,14 +455,14 @@ export function DialogHeader({ icon, title, sub, onClose, monoSub, iconBg, iconC
         <Icon name={icon} size={20} />
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <h2 className="dialog-title">{title}</h2>
+        <h2 className="dialog-title" id={DIALOG_TITLE_ID}>{title}</h2>
         {sub != null && (
           <p className={monoSub ? "mono ellipsis" : ""} style={{ margin: "4px 0 0", fontSize: monoSub ? 12.5 : 13, opacity: 0.7 }}>
             {sub}
           </p>
         )}
       </div>
-      <button type="button" onClick={onClose} aria-label="Close" style={{ width: 30, height: 30, borderRadius: 9, border: 0, background: "rgba(127,127,127,.25)", color: "var(--btn-ink)", opacity: 0.7, cursor: "pointer", display: "grid", placeItems: "center", flex: "none" }}>
+      <button type="button" onClick={onClose} aria-label="Close" data-dialog-close style={{ width: 30, height: 30, borderRadius: 9, border: 0, background: "rgba(127,127,127,.25)", color: "var(--btn-ink)", opacity: 0.7, cursor: "pointer", display: "grid", placeItems: "center", flex: "none" }}>
         <Icon name="x" size={14} />
       </button>
     </div>

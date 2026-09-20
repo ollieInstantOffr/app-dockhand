@@ -317,7 +317,7 @@ function DryRunDialog({ title, sub, state, onRetry, onClose }: { title: string; 
     toast({ kind: "ok", title: `Copied ${what}` });
   };
   return (
-    <Dialog onClose={onClose} width={680}>
+    <Dialog onClose={onClose} width={680} label="Job output">
       <DialogHeader icon="terminal" title={title} sub={sub} monoSub onClose={onClose} />
       {r?.command && (
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, background: "var(--fill-1)" }}>

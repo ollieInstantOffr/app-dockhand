@@ -53,7 +53,7 @@ export function KeyChip({ children }: { children: React.ReactNode }) {
 export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
   const mod = isMac() ? "⌘" : "Ctrl";
   return (
-    <Dialog onClose={onClose} width={620}>
+    <Dialog onClose={onClose} width={620} label="Keyboard shortcuts">
       <DialogHeader icon="keyboard" title="Keyboard shortcuts" sub="Press ? anywhere to bring this up again." onClose={onClose} />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,240px),1fr))", gap: 22 }}>
         {GROUPS.map((g) => (

@@ -85,9 +85,9 @@ export function MachineDetail({ machine, tab, onTab }: { machine: Machine; tab: 
             {busy ? <span className="spinner" style={{ width: 13, height: 13 }} /> : <Icon name="restart" size={15} />}
             Rescan
           </button>
-          <button className="ink-fill" onClick={() => router.push(`/hosts/${m.hostId}`)} style={INK_BTN}>
-            <Icon name="box" size={15} />
-            Containers
+          <button className="ink-fill" onClick={() => router.push(`/hosts/${m.hostId}`)} style={INK_BTN} title="Everything about this host: containers, stacks, storage, networks — and this panel">
+            <Icon name="server" size={15} />
+            Open host
           </button>
           <button className="ink-fill" onClick={reboot} disabled={offline} style={INK_BTN}>
             <Icon name="power" size={15} />

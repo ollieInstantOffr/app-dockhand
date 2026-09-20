@@ -9,9 +9,9 @@
   --blob-3: #dff2ea;
   --ink: #171a21;
   --ink-2: #5f6675;
-  --ink-3: #7a8190;
+  --ink-3: #636a79; /* AA on white and on --bg at small sizes */
   --ink-4: #3d4350;
-  --muted: #9aa1ad;
+  --muted: #767d8b;
   --surface: #ffffff;
   --glass: rgba(255, 255, 255, 0.58);
   --glass-2: rgba(255, 255, 255, 0.72);
@@ -27,7 +27,7 @@
   --btn-ink: #ffffff;
   --btn-hover: #2a2f3c;
   --ok-ink: #157a4f;
-  --warn-ink: #a8720b;
+  --warn-ink: #8a5e08;
   --crit-ink: #b93a36;
   --crit-bg: rgba(255, 240, 239, 0.75);
   --warn-bg: rgba(255, 248, 232, 0.75);
@@ -57,7 +57,7 @@ html.dark {
   --blob-3: #143028;
   --ink: #e9ecf3;
   --ink-2: #aab2c2;
-  --ink-3: #7d8596;
+  --ink-3: #8a93a4;
   --ink-4: #c6ccd8;
   --muted: #5d6472;
   --surface: #1a1f2a;

@@ -171,7 +171,7 @@ function InspectDialog({ hostId, net, onClose }: { hostId: string; net: Network;
     };
   }, [hostId, net.id]);
   return (
-    <Dialog onClose={onClose} width={680}>
+    <Dialog onClose={onClose} width={680} label="Network details">
       <DialogHeader icon="network" title={net.name} sub={`docker network inspect ${net.id.slice(0, 12)}`} monoSub onClose={onClose} />
       <div className="term-block" style={{ maxHeight: "60vh", overflow: "auto", whiteSpace: "pre", wordBreak: "normal", minHeight: 160 }}>
         {err ? <span style={{ color: "#ff8a85" }}>{err}</span> : json ?? <span style={{ color: "#6b7280" }}>Loading…</span>}

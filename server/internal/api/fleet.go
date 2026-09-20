@@ -87,6 +87,53 @@ func (s *Server) fleetMetrics(w http.ResponseWriter, r *http.Request) {
 	ok(w, m)
 }
 
+// Snoozed fleet suggestions live with the settings so they follow the user to
+// any browser, the same way an alert snooze does.
+const snoozeKey = "fleet_snoozed"
+
+func (s *Server) readSnoozed(ctx context.Context) map[string]time.Time {
+	var raw map[string]time.Time
+	if ok, err := s.Settings.GetRaw(ctx, snoozeKey, &raw); err != nil || !ok || raw == nil {
+		return map[string]time.Time{}
+	}
+	live := map[string]time.Time{}
+	for id, until := range raw {
+		if until.After(time.Now()) {
+			live[id] = until
+		}
+	}
+	return live
+}
+
+func (s *Server) fleetSnoozed(w http.ResponseWriter, r *http.Request) {
+	ok(w, s.readSnoozed(r.Context()))
+}
+
+// snoozeSuggestion hides one suggestion for a while ({id, hours}); an empty id clears them all.
+func (s *Server) snoozeSuggestion(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		ID    string `json:"id"`
+		Hours int    `json:"hours"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	cur := s.readSnoozed(r.Context())
+	if in.ID == "" {
+		cur = map[string]time.Time{}
+	} else {
+		if in.Hours <= 0 || in.Hours > 24*30 {
+			in.Hours = 24
+		}
+		cur[in.ID] = time.Now().Add(time.Duration(in.Hours) * time.Hour)
+	}
+	if err := s.Settings.PutRaw(r.Context(), snoozeKey, cur); err != nil {
+		fail(w, err)
+		return
+	}
+	ok(w, cur)
+}
+
 func (s *Server) fleetStacks(w http.ResponseWriter, r *http.Request) { gather(s, w, r, s.Stacks.List) }
 func (s *Server) fleetImages(w http.ResponseWriter, r *http.Request) { gather(s, w, r, s.Ops.Images) }
 func (s *Server) fleetVolumes(w http.ResponseWriter, r *http.Request) {

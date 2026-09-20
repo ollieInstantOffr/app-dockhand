@@ -154,14 +154,16 @@ function Resources() {
 
   const online = (hosts ?? []).filter((h) => h.status !== "offline" && h.status !== "pending").length;
   const running = (containers ?? []).filter((c) => c.state === "running").length;
-  const sub = hosts && containers ? `${plural(containers.length, "container")} · ${running} running · across ${plural(hosts.length, "host")}${online < hosts.length ? ` (${online} online)` : ""}` : "Everything on every host";
+  const sub = hosts && containers
+    ? `One list per kind across all ${plural(hosts.length, "host")}${online < hosts.length ? ` (${online} reachable)` : ""} · ${plural(containers.length, "container")}, ${running} running`
+    : "One list per kind, across every host";
 
   const hostOptions = [{ value: "", label: "All hosts" }, ...(hosts ?? []).map((h) => ({ value: h.id, label: h.name, dot: h.status === "online" ? C.ok : h.status === "offline" ? C.crit : C.warn }))];
 
   return (
     <section data-screen-label="All resources" style={{ animation: "rise .4s ease both", display: "flex", flexDirection: "column", gap: 20 }}>
       <HoverStyles />
-      <PageHeader title="All resources" sub={sub}>
+      <PageHeader title={hostF ? `All resources · ${hostById.get(hostF)?.name ?? ""}` : "All resources"} sub={sub}>
         <Dropdown<string> value={hostF} options={hostOptions} onChange={(v) => setParams({ host: v })} icon={<Icon name="server" size={15} />} minWidth={180} />
       </PageHeader>
 

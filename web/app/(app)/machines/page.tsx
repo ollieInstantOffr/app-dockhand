@@ -89,7 +89,7 @@ function Machines() {
 
   const summary = !machines
     ? "Reading your machines…"
-    : `Your ${plural(machines.length, "host")} from the OS side · ${stats[1].v} update${stats[1].v === "1" ? "" : "s"} waiting · ${stats[3].v} hardening check${stats[3].v === "1" ? "" : "s"} failing`;
+    : `Your ${plural(machines.length, "host")} from the operating system side · ${stats[1].v} update${stats[1].v === "1" ? "" : "s"} waiting · ${stats[3].v} check${stats[3].v === "1" ? "" : "s"} failing`;
 
   if (error && !machines) return <EmptyState icon="server" title="Couldn't load machines" text={error.message} />;
 

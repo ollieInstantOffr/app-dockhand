@@ -187,7 +187,11 @@ function HostView() {
       <div style={{ display: "flex", flexDirection: "column", gap: 20, opacity: offline ? 0.45 : 1, pointerEvents: offline ? "none" : undefined, transition: "opacity .2s" }} aria-disabled={offline || undefined}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
           <div style={{ maxWidth: "100%", overflowX: "auto" }}>
-            <Tabs items={TABS.map((t) => ({ value: t, label: labels[t], icon: icons[t], count: counts[t] }))} value={tab} onChange={(t) => goTab(t)} />
+            <Tabs
+              items={TABS.map((t) => ({ value: t, label: labels[t], icon: icons[t], count: counts[t], title: t === "os" ? "This host's operating system: updates, hardening checks and services" : undefined }))}
+              value={tab}
+              onChange={(t) => goTab(t)}
+            />
           </div>
           {tab === "containers" && (
             <>

@@ -327,7 +327,7 @@ function AutoDeployCard() {
       </label>
       {secret && (
         <Portal>
-        <Dialog onClose={() => setSecret(null)} width={480}>
+        <Dialog onClose={() => setSecret(null)} width={480} label="Webhook secret">
           <DialogHeader icon="key" title="New webhook secret" sub="Shown once — copy it now." onClose={() => setSecret(null)} />
           <div className="term-block" style={{ fontSize: 12.5 }}>{secret}</div>
           <span className="field-hint">Paste it into the Secret field of any webhook you created by hand in GitHub (Settings → Webhooks).</span>

@@ -419,7 +419,7 @@ function FullLogDialog({ onClose }: { onClose: () => void }) {
   const failed = (data ?? []).filter((a) => !a.ok).length;
   return (
     <Portal>
-      <Dialog onClose={onClose} width={640}>
+      <Dialog onClose={onClose} width={640} label="MCP activity log">
         <DialogHeader icon="mcp" title="MCP activity" sub={data ? `Last ${data.length} calls · ${failed} failed` : "Loading…"} onClose={onClose} />
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <span className="input-wrap" style={{ flex: "1 1 220px" }}>
