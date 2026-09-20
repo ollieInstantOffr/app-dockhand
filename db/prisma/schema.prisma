@@ -403,6 +403,7 @@ model MachineFacts {
   services    Json     @default("[]")
   ports       Json     @default("[]")
   checks      Json     @default("[]") // hardening checks
+  pending     Json     @default("[]") // services waiting for a restart (needrestart)
   sudo        Boolean  @default(false) // passwordless sudo (or root)
   lastPatchAt DateTime? @map("last_patch_at") @db.Timestamptz
   aptUpdateAt DateTime? @map("apt_update_at") @db.Timestamptz

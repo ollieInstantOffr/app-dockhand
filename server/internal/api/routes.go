@@ -24,6 +24,10 @@ func (s *Server) registerAPI(r chi.Router) {
 	// Overview & search
 	r.Get("/overview", s.overview)
 	r.Get("/containers", s.allContainers)
+	r.Get("/hosts/{id}/impact", s.hostImpact)
+	r.Get("/hosts/{id}/stacks/{name}/impact", s.stackImpact)
+	r.Get("/hosts/{id}/containers/{cid}/impact", s.containerImpact)
+	r.Post("/machines/{id}/patch-impact", s.patchImpact)
 	r.Get("/machines", s.listMachines)
 	r.Get("/machines/{id}", s.getMachine)
 	r.Post("/machines/{id}/refresh", s.refreshMachine)

@@ -110,6 +110,9 @@ func (s *Service) get(ctx context.Context, id string) (Monitor, error) {
 }
 
 // EnsureHostMonitors creates a host monitor for every host lacking one.
+// All returns every monitor (used by the impact graph).
+func (s *Service) All(ctx context.Context) ([]Monitor, error) { return s.monitors(ctx, "") }
+
 func (s *Service) EnsureHostMonitors(ctx context.Context) error {
 	_, err := s.db.Exec(ctx, `INSERT INTO monitors (name, type, host_id, target, auto)
 		SELECT h.name, 'host', h.id, h.address, true FROM hosts h

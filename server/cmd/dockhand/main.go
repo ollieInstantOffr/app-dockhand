@@ -29,6 +29,7 @@ import (
 	"dockhand/internal/dockerops"
 	"dockhand/internal/gitdeploy"
 	"dockhand/internal/hosts"
+	"dockhand/internal/impact"
 	"dockhand/internal/jobs"
 	"dockhand/internal/machines"
 	"dockhand/internal/mcp"
@@ -237,6 +238,10 @@ func run(cfg *config.Config) error {
 	}
 	regauth.Src = regSvc
 	machineSvc := machines.New(pool, hostStore, conns, jobRunner)
+	impactSvc := impact.New(hostStore, mon, upSvc)
+	machineSvc.Impact = func(ctx context.Context, hostID string) (model.Impact, error) {
+		return impactSvc.Host(ctx, hostID, "patch")
+	}
 	sysSvc.OnAutoUpdate = func(target, jobID string) {
 		alertEngine.Event(context.Background(), alerts.Spec{Key: "auto_update:" + jobID, Severity: "info", Kind: "self_update",
 			Title: "Dockhand is updating itself to " + target, Text: "Automatic update inside the update window. Dockhand restarts in a minute or two.",
@@ -283,7 +288,7 @@ func run(cfg *config.Config) error {
 
 	handler, err := api.New(api.Deps{Cfg: cfg, DB: pool, Auth: authSvc, Settings: st, Hosts: hostStore, Conns: conns, Monitor: mon,
 		Ops: ops, Stacks: stackSvc, Jobs: jobRunner, Git: gitSvc, Uptime: upSvc, Alerts: alertEngine, MCP: mcpProvider,
-		System: sysSvc, Registry: regSvc, Machines: machineSvc, HostKey: hostKey, DeployKey: deployKey, Preflight: deploycheck.New(hostStore, ops, stackSvc, mon)})
+		System: sysSvc, Registry: regSvc, Machines: machineSvc, Impact: impactSvc, HostKey: hostKey, DeployKey: deployKey, Preflight: deploycheck.New(hostStore, ops, stackSvc, mon)})
 	if err != nil {
 		return err
 	}

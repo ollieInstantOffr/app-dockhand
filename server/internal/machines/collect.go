@@ -32,6 +32,7 @@ echo @@sshd; sshd -T 2>/dev/null | grep -Ei '^(passwordauthentication|permitroot
 echo @@firewall; ufw status 2>/dev/null | head -1; firewall-cmd --state 2>/dev/null; nft list ruleset 2>/dev/null | grep -E 'hook input .*policy drop' | head -2; iptables -S INPUT 2>/dev/null | head -40
 echo @@unattended; systemctl is-enabled unattended-upgrades 2>/dev/null; cat /etc/apt/apt.conf.d/20auto-upgrades 2>/dev/null
 echo @@fail2ban; systemctl is-active fail2ban 2>/dev/null
+echo @@needrestart; needrestart -b 2>/dev/null | sed -n 's/^NEEDRESTART-SVC: //p' | head -20
 echo @@end
 `
 
@@ -63,7 +64,7 @@ func first(lines []string) string {
 func parse(out string) model.Machine {
 	s := sections(out)
 	m := model.Machine{PkgManager: first(s["pkgmgr"]), RebootPkgs: []string{}, Packages: []model.MachinePackage{},
-		Services: []model.MachineService{}, Ports: []model.MachinePort{}, Checks: []model.MachineCheck{}, Baselines: []string{}}
+		Services: []model.MachineService{}, Ports: []model.MachinePort{}, Checks: []model.MachineCheck{}, Baselines: []string{}, Pending: []string{}}
 
 	osrel := map[string]string{}
 	for _, l := range s["os"] {
@@ -104,6 +105,11 @@ func parse(out string) model.Machine {
 		if milli, err := strconv.ParseFloat(t, 64); err == nil && milli > 1000 {
 			c := milli / 1000
 			m.TempC = &c
+		}
+	}
+	for _, l := range s["needrestart"] {
+		if u := strings.TrimSuffix(strings.TrimSpace(l), ".service"); u != "" {
+			m.Pending = append(m.Pending, u)
 		}
 	}
 	m.Sudo = first(s["sudo"]) == "yes"

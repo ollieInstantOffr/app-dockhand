@@ -11,6 +11,7 @@ import { useShell, type Shell } from "../shell/context";
 import { SemiGauge } from "../charts/SemiGauge";
 import { act, trackJob } from "./jobs";
 import { InkStatus, gaugeColor, gbPair, hostBigColor, hostDot, hostStatusShort, stoppedText } from "./bits";
+import { ImpactDialog } from "../impact/Impact";
 
 const CARD: React.CSSProperties = { borderRadius: 26, background: "var(--surface)", boxShadow: "var(--card-shadow)", display: "flex", flexDirection: "column", overflow: "hidden" };
 const INVALIDATE = [`/api/hosts`, "/api/containers", "/api/overview"];
@@ -35,6 +36,7 @@ export async function confirmPrune(shell: Pick<Shell, "confirm" | "toast">, host
 export function HostHeader({ host, containers }: { host: Host | undefined; containers: Container[] | undefined }) {
   const router = useRouter();
   const shell = useShell();
+  const [impact, setImpact] = useState(false);
   if (!host) {
     return (
       <div style={CARD}>
@@ -111,6 +113,15 @@ export function HostHeader({ host, containers }: { host: Host | undefined; conta
           <span className="mono ellipsis" style={{ fontSize: 11.5, opacity: 0.6 }}>{meta}</span>
         </span>
         <ShellButton host={host} containers={containers} offline={offline} />
+        <button
+          onClick={() => setImpact(true)}
+          title="What stops if this host goes down"
+          style={{ height: 36, padding: "0 14px", borderRadius: 12, border: 0, background: "rgba(127,127,127,.22)", color: "var(--btn-ink)", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap", flex: "none" }}
+        >
+          <Icon name="alert" size={15} strokeWidth={2.2} />
+          Blast radius
+        </button>
+        {impact && <ImpactDialog path={`/api/hosts/${host.id}/impact?action=reboot`} title={`If ${host.name} goes down`} sub="Rebooting it, losing power or patching Docker stops all of this" onClose={() => setImpact(false)} />}
         <button
           onClick={() => router.replace(`/hosts/${host.id}?tab=os`, { scroll: false })}
           title="Operating system updates, hardening and services"

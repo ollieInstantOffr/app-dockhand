@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { post } from "@/lib/api";
+import { get, post } from "@/lib/api";
 import { C, containerColor, halo, plural, portsText, shortSha } from "@/lib/format";
-import type { JobRef, Stack } from "@/lib/types";
+import type { Impact, JobRef, Stack } from "@/lib/types";
 import { EmptyState, Skel } from "../ui";
 import { Icon } from "../icons";
 import { useShell } from "../shell/context";
+import { impactDetails } from "@/components/impact/Impact";
 import { trackJob } from "./jobs";
 
 const STATUS_DOT: Record<Stack["status"], string> = { running: C.ok, partial: C.warn, stopped: "#9aa1ad" };
@@ -88,11 +89,20 @@ function StackCard({ s, hostId }: { s: Stack; hostId: string }) {
   };
 
   const stop = async () => {
+    // Say what goes quiet before stopping it.
+    let blast: Impact | undefined;
+    try {
+      blast = await get<Impact>(`/api/hosts/${hostId}/stacks/${encodeURIComponent(s.name)}/impact?action=down`);
+    } catch {
+      /* the confirm still works without it */
+    }
     const ok = await shell.confirm({
       title: `Stop ${s.name}?`,
-      text: `All ${plural(s.services.length, "service")} in this stack are stopped. Containers and volumes are kept, so you can start it again.`,
+      text: blast?.summary ?? `All ${plural(s.services.length, "service")} in this stack are stopped. Containers and volumes are kept, so you can start it again.`,
       confirmLabel: "Stop stack",
+      danger: (blast?.monitors.length ?? 0) > 0,
       icon: "stop",
+      details: impactDetails(blast),
     });
     if (ok) run("stop", `Stopping ${s.name}`, `${s.name} stopped`);
   };

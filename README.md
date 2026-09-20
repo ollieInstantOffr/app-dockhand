@@ -89,6 +89,14 @@ neither git nor your token.
 **Alerts → Activity** lists every job Dockhand has run — deploys, updates, patches, backups, clean-ups — with who
 started it, how long it took, and its steps and output.
 
+### Blast radius
+
+Before anything disruptive, Dockhand says what it takes down. **Blast radius** on a host page lists the
+containers that stop, the stacks and published ports affected and the uptime checks that will fail; the same
+report is folded into the reboot and stack-stop confirmations. On the Updates tab, selecting packages predicts
+what installing them restarts — a docker package restarts the daemon and every container with it, a kernel
+needs a reboot, libc restarts most services — alongside anything `needrestart` says is already waiting.
+
 ### Machines
 
 A host's own page has the same thing under **OS & security**; the Machines page is the fleet-wide view of it.

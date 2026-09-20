@@ -27,6 +27,7 @@ import (
 	"dockhand/internal/dockerops"
 	"dockhand/internal/gitdeploy"
 	"dockhand/internal/hosts"
+	"dockhand/internal/impact"
 	"dockhand/internal/jobs"
 	"dockhand/internal/machines"
 	"dockhand/internal/mcp"
@@ -60,6 +61,7 @@ type Deps struct {
 	System    *system.Service
 	Registry  *registry.Service
 	Machines  *machines.Service
+	Impact    *impact.Service
 	HostKey   *sshkeys.Key
 	DeployKey *sshkeys.Key
 }

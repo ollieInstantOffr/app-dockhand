@@ -41,6 +41,9 @@ Response shapes are defined in [`web/lib/types.ts`](../web/lib/types.ts); names 
 | GET | `/api/containers` | – | `Container[]` across all hosts (cached from the poller; for palette + pickers) |
 | GET | `/api/fleet/metrics?range=24h` | – | `FleetMetrics`: every host's load averaged and bucketed, plus this window's and the previous window's averages (the fleet pulse) |
 | GET | `/api/fleet/stacks` · `/images` · `/volumes` · `/networks` | – | `FleetList<T>`: `{items: {hostId, hostName, item}[], errors, skipped}` — the per-host list from every reachable host, in parallel; a failing host lands in `errors`, offline ones in `skipped` |
+| GET | `/api/hosts/:id/impact?action=` | – | `Impact`: what stops if this host reboots or is patched — containers, stacks, published ports, uptime checks |
+| GET | `/api/hosts/:id/stacks/:name/impact` · `/containers/:cid/impact` | – | The same for one stack or container |
+| POST | `/api/machines/:id/patch-impact` | `{packages?, securityOnly?}` | `PatchImpact`: what installing those updates restarts (Docker and its containers, services, reboot) |
 | GET | `/api/machines` | – | `Machine[]`: OS facts, packages, services, ports and hardening checks per host |
 | GET | `/api/machines/:id[?refresh=1]` | – | One `Machine`, optionally scanned first |
 | POST | `/api/machines/:id/refresh` | – | Collect facts now (returns the `Machine`) |

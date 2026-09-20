@@ -888,3 +888,51 @@ export interface BaselinesResponse {
   baselines: Baseline[];
   rules: { id: string; title: string; group: string }[];
 }
+
+// ─── Impact (blast radius) ─────────────────────────────────────────────────
+
+export interface ImpactItem {
+  kind: "container" | "stack" | "monitor" | "port" | "service" | "host";
+  name: string;
+  detail: string;
+  host: string;
+  severity: "crit" | "warn" | "info";
+  href?: string;
+}
+
+/** What an action would take down. */
+export interface Impact {
+  target: "host" | "stack" | "container";
+  name: string;
+  host: string;
+  action: string;
+  summary: string;
+  severity: "crit" | "warn" | "info";
+  stops: ImpactItem[];
+  stacks: ImpactItem[];
+  monitors: ImpactItem[];
+  ports: ImpactItem[];
+  depends: ImpactItem[];
+  safe: string[];
+}
+
+export interface PatchPackage {
+  name: string;
+  effect: "docker" | "reboot" | "services" | "ssh" | "none";
+  detail: string;
+  service?: string;
+}
+
+/** What installing a set of updates would restart. */
+export interface PatchImpact {
+  packages: number;
+  security: number;
+  docker: boolean;
+  reboot: boolean;
+  services: string[];
+  pending: string[];
+  containers: ImpactItem[];
+  details: PatchPackage[];
+  summary: string;
+  severity: "crit" | "warn" | "info";
+}

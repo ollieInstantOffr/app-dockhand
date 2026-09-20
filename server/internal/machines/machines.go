@@ -26,6 +26,10 @@ type Service struct {
 	conns *hosts.Manager
 	jobs  *jobs.Runner
 
+	// Impact returns a host's blast radius; set by main so patch impact can say
+	// which containers a Docker restart would stop.
+	Impact func(ctx context.Context, hostID string) (model.Impact, error)
+
 	mu      sync.Mutex
 	running map[string]bool // hosts being collected right now
 }
@@ -37,14 +41,14 @@ func New(pool *db.DB, hs *hosts.Store, conns *hosts.Manager, jr *jobs.Runner) *S
 // ─── Reading ────────────────────────────────────────────────────────────────
 
 const factCols = `host_id::text, os, release, kernel, arch, pkg_manager, uptime_sec, load, temp_c, reboot,
-	reboot_pkgs, packages, services, ports, checks, sudo, last_patch_at, apt_update_at, error, collected_at`
+	reboot_pkgs, packages, services, ports, checks, pending, sudo, last_patch_at, apt_update_at, error, collected_at`
 
 func scanFacts(row interface{ Scan(...any) error }) (model.Machine, error) {
 	var m model.Machine
-	var rebootPkgs, pkgs, svcs, ports, chks []byte
+	var rebootPkgs, pkgs, svcs, ports, chks, pending []byte
 	var collected time.Time
 	err := row.Scan(&m.HostID, &m.OS, &m.Release, &m.Kernel, &m.Arch, &m.PkgManager, &m.UptimeSec, &m.Load, &m.TempC,
-		&m.Reboot, &rebootPkgs, &pkgs, &svcs, &ports, &chks, &m.Sudo, &m.LastPatchAt, &m.AptUpdateAt, &m.Error, &collected)
+		&m.Reboot, &rebootPkgs, &pkgs, &svcs, &ports, &chks, &pending, &m.Sudo, &m.LastPatchAt, &m.AptUpdateAt, &m.Error, &collected)
 	if err != nil {
 		return m, err
 	}
@@ -54,6 +58,7 @@ func scanFacts(row interface{ Scan(...any) error }) (model.Machine, error) {
 	_ = json.Unmarshal(svcs, &m.Services)
 	_ = json.Unmarshal(ports, &m.Ports)
 	_ = json.Unmarshal(chks, &m.Checks)
+	_ = json.Unmarshal(pending, &m.Pending)
 	for _, p := range m.Packages {
 		if p.Security {
 			m.Security++
@@ -77,6 +82,9 @@ func blank(m *model.Machine) {
 	}
 	if m.Checks == nil {
 		m.Checks = []model.MachineCheck{}
+	}
+	if m.Pending == nil {
+		m.Pending = []string{}
 	}
 	if m.Baselines == nil {
 		m.Baselines = []string{}
@@ -211,16 +219,16 @@ func (s *Service) save(ctx context.Context, m model.Machine) error {
 		return b
 	}
 	_, err := s.db.Exec(ctx, `INSERT INTO machine_facts (host_id, os, release, kernel, arch, pkg_manager, uptime_sec, load,
-		temp_c, reboot, reboot_pkgs, packages, services, ports, checks, sudo, last_patch_at, apt_update_at, error, collected_at)
-		VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, now())
+		temp_c, reboot, reboot_pkgs, packages, services, ports, checks, pending, sudo, last_patch_at, apt_update_at, error, collected_at)
+		VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, now())
 		ON CONFLICT (host_id) DO UPDATE SET os = EXCLUDED.os, release = EXCLUDED.release, kernel = EXCLUDED.kernel,
 		arch = EXCLUDED.arch, pkg_manager = EXCLUDED.pkg_manager, uptime_sec = EXCLUDED.uptime_sec, load = EXCLUDED.load,
 		temp_c = EXCLUDED.temp_c, reboot = EXCLUDED.reboot, reboot_pkgs = EXCLUDED.reboot_pkgs, packages = EXCLUDED.packages,
-		services = EXCLUDED.services, ports = EXCLUDED.ports, checks = EXCLUDED.checks, sudo = EXCLUDED.sudo,
+		services = EXCLUDED.services, ports = EXCLUDED.ports, checks = EXCLUDED.checks, pending = EXCLUDED.pending, sudo = EXCLUDED.sudo,
 		last_patch_at = EXCLUDED.last_patch_at, apt_update_at = EXCLUDED.apt_update_at, error = EXCLUDED.error,
 		collected_at = now()`,
 		m.HostID, m.OS, m.Release, m.Kernel, m.Arch, m.PkgManager, m.UptimeSec, m.Load, m.TempC, m.Reboot,
-		j(m.RebootPkgs), j(m.Packages), j(m.Services), j(m.Ports), j(m.Checks), m.Sudo, m.LastPatchAt, m.AptUpdateAt, m.Error)
+		j(m.RebootPkgs), j(m.Packages), j(m.Services), j(m.Ports), j(m.Checks), j(m.Pending), m.Sudo, m.LastPatchAt, m.AptUpdateAt, m.Error)
 	return err
 }
 

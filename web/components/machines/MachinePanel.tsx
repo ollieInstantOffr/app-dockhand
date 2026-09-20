@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { errMsg, invalidate, post, useApi } from "@/lib/api";
+import { errMsg, get, invalidate, post, useApi } from "@/lib/api";
 import { C, ago, avatarBg, duration, halo, initial, plural } from "@/lib/format";
-import type { CheckStatus, JobRef, Machine, MachineCheck, MachinePackage, MachineService } from "@/lib/types";
+import type { CheckStatus, Impact, JobRef, Machine, MachineCheck, MachinePackage, MachineService, PatchImpact } from "@/lib/types";
 import { Tabs } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icons";
 import { useShell } from "@/components/shell/context";
 import { trackJob } from "@/components/host/jobs";
+import { impactDetails } from "@/components/impact/Impact";
 
 // The machine side of a host — OS updates, hardening checks, ports and
 // services. Used twice: as a tab on the host page (embedded) and as the detail
@@ -52,13 +53,20 @@ export function MachineDetail({ machine, tab, onTab }: { machine: Machine; tab: 
   };
 
   const reboot = async () => {
+    // Say what goes down before asking, not after.
+    let blast: Impact | undefined;
+    try {
+      blast = await get<Impact>(`/api/hosts/${m.hostId}/impact?action=reboot`);
+    } catch {
+      /* the confirm still works without it */
+    }
     const ok = await shell.confirm({
       title: `Reboot ${m.name}?`,
-      text: "Every container on this machine stops and starts again with it. Containers with a restart policy come back by themselves.",
+      text: blast?.summary ?? "Every container on this machine stops and starts again with it.",
       confirmLabel: "Reboot",
       danger: true,
       icon: "power",
-      details: m.rebootPkgs.length ? [{ k: "Waiting on", v: m.rebootPkgs.slice(0, 3).join(", ") }] : undefined,
+      details: [...impactDetails(blast), ...(m.rebootPkgs.length ? [{ k: "Waiting on", v: m.rebootPkgs.slice(0, 3).join(", ") }] : [])],
     });
     if (!ok) return;
     trackJob(shell, post<JobRef>(`/api/machines/${m.hostId}/fix/reboot`), { title: `Rebooting ${m.name}`, done: `${m.name} is rebooting`, invalidate: INVALIDATE });
@@ -184,6 +192,33 @@ function UpdatesTab({ m, reload }: { m: Machine; reload: () => void }) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   useEffect(() => setPicked(new Set(m.packages.filter((p) => p.security).map((p) => p.name))), [m.hostId, m.packages.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // What the current selection would restart, predicted from the package names.
+  const [impact, setImpact] = useState<PatchImpact | undefined>();
+  const [predicting, setPredicting] = useState(false);
+  const pickedKey = [...picked].sort().join(",");
+  useEffect(() => {
+    if (!picked.size) {
+      setImpact(undefined);
+      return;
+    }
+    let alive = true;
+    setPredicting(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await post<PatchImpact>(`/api/machines/${m.hostId}/patch-impact`, { packages: [...picked] });
+        if (alive) setImpact(r);
+      } catch {
+        if (alive) setImpact(undefined);
+      } finally {
+        if (alive) setPredicting(false);
+      }
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [pickedKey, m.hostId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const aptUpdate = () =>
     trackJob(shell, post<JobRef>(`/api/machines/${m.hostId}/apt-update`), { title: `apt update on ${m.name}`, done: "Package lists refreshed", invalidate: INVALIDATE, onDone: reload });
 
@@ -191,12 +226,17 @@ function UpdatesTab({ m, reload }: { m: Machine; reload: () => void }) {
     const names = [...picked];
     if (!names.length) return;
     const sec = m.packages.filter((p) => picked.has(p.name) && p.security).length;
+    const details = [{ k: "Security updates", v: String(sec) }];
+    if (impact?.docker) details.push({ k: "Docker restarts", v: `${plural(impact.containers.length, "container")} stop briefly` });
+    if (impact?.services.length) details.push({ k: "Services restarting", v: impact.services.join(", ") });
+    if (impact?.reboot) details.push({ k: "Afterwards", v: "a reboot is needed to finish" });
     const ok = await shell.confirm({
       title: `Install ${plural(names.length, "update")} on ${m.name}?`,
-      text: "apt installs them now, keeping your existing config files. Services that depend on them restart, and a reboot may be needed afterwards.",
+      text: impact?.summary ?? "apt installs them now, keeping your existing config files.",
       confirmLabel: `Install ${names.length}`,
+      danger: !!impact?.docker,
       icon: "update",
-      details: [{ k: "Security updates", v: String(sec) }, ...names.slice(0, 4).map((n) => ({ k: n, v: m.packages.find((p) => p.name === n)?.candidate ?? "" }))],
+      details: [...details, ...names.slice(0, 3).map((n) => ({ k: n, v: m.packages.find((p) => p.name === n)?.candidate ?? "" }))],
     });
     if (!ok) return;
     trackJob(shell, post<JobRef>(`/api/machines/${m.hostId}/install`, { packages: names }), { title: `Installing updates on ${m.name}`, done: `${m.name} updated`, invalidate: INVALIDATE, onDone: reload });
@@ -256,6 +296,7 @@ function UpdatesTab({ m, reload }: { m: Machine; reload: () => void }) {
         </button>
         {m.packages.map((p) => <PackageRow key={p.name} p={p} on={picked.has(p.name)} onToggle={() => toggle(p.name)} />)}
       </div>
+      {picked.size > 0 && <PatchImpactLine impact={impact} loading={predicting} />}
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <span style={{ fontSize: 12.5, color: "var(--ink-2)" }}>
           {picked.size ? `${plural(picked.size, "package")} selected` : "Nothing selected"}
@@ -270,6 +311,37 @@ function UpdatesTab({ m, reload }: { m: Machine; reload: () => void }) {
           Install {picked.size || ""} {picked.size === 1 ? "update" : "updates"}
         </button>
       </div>
+    </div>
+  );
+}
+
+/** What installing the selected updates would restart. */
+function PatchImpactLine({ impact, loading }: { impact?: PatchImpact; loading: boolean }) {
+  if (loading && !impact) return <span className="skel" style={{ height: 44, borderRadius: 14 }} />;
+  if (!impact) return null;
+  const tone = impact.severity === "crit" ? C.crit : impact.severity === "warn" ? C.warn : C.ok;
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", borderRadius: 14, background: "var(--fill-1)", border: `1px solid ${tone}33` }}>
+      <span style={{ width: 28, height: 28, borderRadius: 9, background: `${tone}22`, color: tone, display: "grid", placeItems: "center", flex: "none" }}>
+        <Icon name={impact.severity === "info" ? "check" : "alert"} size={15} strokeWidth={2.4} />
+      </span>
+      <span style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, flex: 1 }}>
+        <span style={{ fontSize: 13, fontWeight: 700 }}>{impact.summary}</span>
+        {impact.containers.length > 0 && (
+          <span className="ellipsis" style={{ fontSize: 12, color: "var(--ink-3)" }}>
+            Stops: {impact.containers.slice(0, 6).map((c) => c.name).join(", ")}
+            {impact.containers.length > 6 ? ` and ${impact.containers.length - 6} more` : ""}
+          </span>
+        )}
+        {impact.pending.length > 0 && (
+          <span className="ellipsis" style={{ fontSize: 12, color: "var(--ink-3)" }}>Already waiting for a restart: {impact.pending.join(", ")}</span>
+        )}
+        {impact.details.length > 0 && (
+          <span className="ellipsis" style={{ fontSize: 11.5, color: "var(--ink-3)" }}>
+            {impact.details.slice(0, 3).map((d) => `${d.name} — ${d.detail}`).join(" · ")}
+          </span>
+        )}
+      </span>
     </div>
   );
 }

@@ -151,6 +151,8 @@ type Container struct {
 	StartedAt  *time.Time `json:"startedAt"`
 	FinishedAt *time.Time `json:"finishedAt"`
 	Update     UpdateInfo `json:"update"`
+	// RestartPolicy is docker's own ("no", "always", "unless-stopped", "on-failure").
+	RestartPolicy string `json:"restartPolicy"`
 
 	// Internal (not serialised).
 	Labels     map[string]string `json:"-"`
@@ -201,7 +203,6 @@ type ContainerDetail struct {
 	Entrypoint     string             `json:"entrypoint"`
 	Workdir        string             `json:"workdir"`
 	Hostname       string             `json:"hostname"`
-	RestartPolicy  string             `json:"restartPolicy"`
 	RestartCount   int                `json:"restartCount"`
 	Env            []EnvVar           `json:"env"`
 	Labels         []KV               `json:"labels"`
@@ -897,7 +898,8 @@ type Machine struct {
 	Services    []MachineService `json:"services"`
 	Ports       []MachinePort    `json:"ports"`
 	Checks      []MachineCheck   `json:"checks"`
-	Sudo        bool             `json:"sudo"` // root or passwordless sudo
+	Pending     []string         `json:"pending"` // services needrestart says are waiting for a restart
+	Sudo        bool             `json:"sudo"`    // root or passwordless sudo
 	LastPatchAt *time.Time       `json:"lastPatchAt"`
 	AptUpdateAt *time.Time       `json:"aptUpdateAt"`
 	CollectedAt *time.Time       `json:"collectedAt"`
@@ -937,4 +939,54 @@ type BaselineInput struct {
 	Color       string   `json:"color"`
 	Rules       []string `json:"rules"`
 	HostIDs     []string `json:"hostIds"`
+}
+
+// ─── Impact (blast radius) ─────────────────────────────────────────────────
+
+// ImpactItem is one thing affected by an action.
+type ImpactItem struct {
+	Kind     string `json:"kind"` // container | stack | monitor | port | service | host
+	Name     string `json:"name"`
+	Detail   string `json:"detail"`
+	Host     string `json:"host"`
+	Severity string `json:"severity"` // crit | warn | info
+	Href     string `json:"href,omitempty"`
+}
+
+// Impact is what an action would take down: the blast radius.
+type Impact struct {
+	Target   string       `json:"target"`   // "host" | "stack" | "container"
+	Name     string       `json:"name"`     // what the action is aimed at
+	Host     string       `json:"host"`     // host name
+	Action   string       `json:"action"`   // "reboot" | "stop" | "patch"
+	Summary  string       `json:"summary"`  // one sentence
+	Severity string       `json:"severity"` // crit | warn | info
+	Stops    []ImpactItem `json:"stops"`    // containers that stop
+	Stacks   []ImpactItem `json:"stacks"`
+	Monitors []ImpactItem `json:"monitors"` // uptime checks that will fail
+	Ports    []ImpactItem `json:"ports"`    // published endpoints that go away
+	Depends  []ImpactItem `json:"depends"`  // things that talk to it and may break
+	Safe     []string     `json:"safe"`     // what keeps running / comes back by itself
+}
+
+// PatchPackage is one pending update and what installing it disturbs.
+type PatchPackage struct {
+	Name    string `json:"name"`
+	Effect  string `json:"effect"` // docker | reboot | services | ssh | none
+	Detail  string `json:"detail"`
+	Service string `json:"service,omitempty"`
+}
+
+// PatchImpact predicts what installing a set of updates would restart.
+type PatchImpact struct {
+	Packages   int            `json:"packages"`
+	Security   int            `json:"security"`
+	Docker     bool           `json:"docker"`   // Docker itself restarts
+	Reboot     bool           `json:"reboot"`   // needs a reboot to take effect
+	Services   []string       `json:"services"` // units that restart
+	Pending    []string       `json:"pending"`  // services already waiting for a restart (needrestart)
+	Containers []ImpactItem   `json:"containers"`
+	Details    []PatchPackage `json:"details"`
+	Summary    string         `json:"summary"`
+	Severity   string         `json:"severity"`
 }

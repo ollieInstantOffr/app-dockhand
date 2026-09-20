@@ -381,6 +381,7 @@ func (m *Monitor) enrich(ctx context.Context, hostID string, cli interface {
 		if ii := s.inspect[c.ID]; ii != nil {
 			c.StartedAt = ii.startedAt
 			c.FinishedAt = ii.finishedAt
+			c.RestartPolicy = ii.restartPol
 			if c.State == "running" || c.State == "created" {
 				c.FinishedAt = nil
 			}
@@ -678,6 +679,7 @@ func (m *Monitor) enrichLight(ctx context.Context, hostID string, cli interface 
 		c := &ctrs[i]
 		if ii := s.inspect[c.ID]; ii != nil {
 			c.StartedAt, c.FinishedAt = ii.startedAt, ii.finishedAt
+			c.RestartPolicy = ii.restartPol
 			if c.State == "running" || c.State == "created" {
 				c.FinishedAt = nil
 			}
