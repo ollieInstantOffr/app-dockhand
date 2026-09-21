@@ -352,13 +352,13 @@ func TestCatalog(t *testing.T) {
 		"update_container": {"Containers", true},
 		"get_logs":         {"Logs", false}, "search_logs": {"Logs", false},
 		"list_stacks": {"Stacks", false}, "get_compose": {"Stacks", false},
-		"stack_action": {"Stacks", true}, "update_compose": {"Stacks", true},
+		"stack_action": {"Stacks", true}, "update_compose": {"Stacks", true}, "pull_and_rebuild": {"Stacks", true},
 		"list_images": {"Images", false}, "pull_image": {"Images", true}, "prune_images": {"Images", true},
 		"deploy_from_github": {"Deploy", true}, "run_container": {"Deploy", true},
 	}
 	cat := Catalog()
-	if len(cat) != 21 || len(want) != 21 {
-		t.Fatalf("catalog has %d tools, want 21", len(cat))
+	if len(cat) != 22 || len(want) != 22 {
+		t.Fatalf("catalog has %d tools, want 22", len(cat))
 	}
 	seen := map[string]bool{}
 	for _, tl := range cat {

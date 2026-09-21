@@ -936,3 +936,34 @@ export interface PatchImpact {
   summary: string;
   severity: "crit" | "warn" | "info";
 }
+
+// ─── Git-backed stacks ─────────────────────────────────────────────────────
+
+export interface GitCommit {
+  sha: string;
+  message: string;
+  author: string;
+  date: ISODate | null;
+}
+
+/** Where a git-backed stack stands against its branch. */
+export interface StackGitStatus {
+  kind: "managed" | "checkout" | "none"; // managed = deployed by Dockhand from GitHub; checkout = a git clone on the host
+  repo: string;
+  branch: string;
+  path: string;
+  current: string;
+  latest: string;
+  behind: number; // -1 = unknown
+  ahead: number;
+  commits: GitCommit[];
+  dirty: number; // checkout: tracked files changed on the host
+  compareUrl: string;
+  error?: string;
+}
+
+export interface StackGitUpdate {
+  force: boolean;
+  pullImages: boolean;
+  noCache: boolean;
+}

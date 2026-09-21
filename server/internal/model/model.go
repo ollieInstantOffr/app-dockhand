@@ -990,3 +990,35 @@ type PatchImpact struct {
 	Summary    string         `json:"summary"`
 	Severity   string         `json:"severity"`
 }
+
+// ─── Git-backed stacks ─────────────────────────────────────────────────────
+
+type GitCommit struct {
+	SHA     string     `json:"sha"`
+	Message string     `json:"message"`
+	Author  string     `json:"author"`
+	Date    *time.Time `json:"date"`
+}
+
+// StackGitStatus is where a git-backed stack stands against its branch.
+type StackGitStatus struct {
+	Kind       string      `json:"kind"` // managed (deployed by Dockhand from GitHub) | checkout (a git clone on the host) | none
+	Repo       string      `json:"repo"`
+	Branch     string      `json:"branch"`
+	Path       string      `json:"path"`
+	Current    string      `json:"current"`
+	Latest     string      `json:"latest"`
+	Behind     int         `json:"behind"`
+	Ahead      int         `json:"ahead"` // checkout: local commits the remote doesn't have
+	Commits    []GitCommit `json:"commits"`
+	Dirty      int         `json:"dirty"` // checkout: tracked files changed on the host
+	CompareURL string      `json:"compareUrl"`
+	Error      string      `json:"error,omitempty"`
+}
+
+// StackGitUpdate is how to pull and rebuild.
+type StackGitUpdate struct {
+	Force      bool `json:"force"`      // checkout: discard local changes (git reset --hard to the remote)
+	PullImages bool `json:"pullImages"` // pull newer base images while building
+	NoCache    bool `json:"noCache"`    // rebuild every layer
+}

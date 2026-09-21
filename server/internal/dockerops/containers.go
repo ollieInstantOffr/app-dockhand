@@ -738,7 +738,10 @@ func RunLogged(ctx context.Context, conn *hosts.Conn, j *jobs.Job, cmd string) e
 		if stream == "stderr" {
 			level = "muted"
 			l := strings.ToLower(line)
-			if strings.Contains(l, "error") || strings.Contains(l, "failed") {
+			// Tools log structured lines like `level=warning msg="…" error="…"`; the level wins.
+			if strings.Contains(l, "level=warn") || strings.HasPrefix(l, "warn") || strings.HasPrefix(l, "warning") {
+				level = "warn"
+			} else if strings.Contains(l, "error") || strings.Contains(l, "failed") {
 				level = "error"
 			} else if strings.Contains(l, "warn") {
 				level = "warn"

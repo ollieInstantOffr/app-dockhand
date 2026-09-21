@@ -94,6 +94,8 @@ func (s *Server) registerAPI(r chi.Router) {
 	r.Get("/hosts/{id}/stacks", s.listStacks)
 	r.Post("/hosts/{id}/stacks", s.createStack)
 	r.Get("/hosts/{id}/stacks/{name}/compose", s.getCompose)
+	r.Get("/hosts/{id}/stacks/{name}/git", s.stackGit)
+	r.Post("/hosts/{id}/stacks/{name}/pull-rebuild", s.stackPullRebuild)
 	r.Put("/hosts/{id}/stacks/{name}/compose", s.putCompose)
 	r.Patch("/hosts/{id}/stacks/{name}", s.patchStack)
 	r.Post("/hosts/{id}/stacks/{name}/{action}", s.stackAction)

@@ -44,6 +44,8 @@ Response shapes are defined in [`web/lib/types.ts`](../web/lib/types.ts); names 
 | GET | `/api/hosts/:id/impact?action=` | – | `Impact`: what stops if this host reboots or is patched — containers, stacks, published ports, uptime checks |
 | GET | `/api/hosts/:id/stacks/:name/impact` · `/containers/:cid/impact` | – | The same for one stack or container |
 | POST | `/api/machines/:id/patch-impact` | `{packages?, securityOnly?}` | `PatchImpact`: what installing those updates restarts (Docker and its containers, services, reboot) |
+| GET | `/api/hosts/:id/stacks/:name/git` | – | `StackGitStatus`: for a stack deployed from GitHub (`managed`) or a git clone on the host (`checkout`) — current vs latest commit, the commits in between, local changes |
+| POST | `/api/hosts/:id/stacks/:name/pull-rebuild` | `{force, pullImages, noCache}` | `JobRef`: git pull (or reset --hard with force) then `docker compose up -d --build` |
 | GET | `/api/machines` | – | `Machine[]`: OS facts, packages, services, ports and hardening checks per host |
 | GET | `/api/machines/:id[?refresh=1]` | – | One `Machine`, optionally scanned first |
 | POST | `/api/machines/:id/refresh` | – | Collect facts now (returns the `Machine`) |

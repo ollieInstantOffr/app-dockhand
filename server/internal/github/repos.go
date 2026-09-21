@@ -462,3 +462,48 @@ func (c *Client) LatestRelease(ctx context.Context, owner, repo string, prerelea
 	}
 	return best, nil
 }
+
+// CompareCommit is one commit in a comparison.
+type CompareCommit struct {
+	SHA     string
+	Message string // first line
+	Author  string
+	Date    *time.Time
+}
+
+// Comparison is base...head: how far head is ahead, and the commits in between.
+type Comparison struct {
+	AheadBy  int
+	BehindBy int
+	Commits  []CompareCommit // newest first
+	HTMLURL  string
+}
+
+// Compare lists the commits between base and head.
+func (c *Client) Compare(ctx context.Context, owner, repo, base, head string) (Comparison, error) {
+	var raw struct {
+		HTMLURL  string `json:"html_url"`
+		AheadBy  int    `json:"ahead_by"`
+		BehindBy int    `json:"behind_by"`
+		Commits  []struct {
+			SHA    string `json:"sha"`
+			Commit struct {
+				Message string `json:"message"`
+				Author  struct {
+					Name string     `json:"name"`
+					Date *time.Time `json:"date"`
+				} `json:"author"`
+			} `json:"commit"`
+		} `json:"commits"`
+	}
+	if _, err := c.doJSON(ctx, http.MethodGet, repoPath(owner, repo)+"/compare/"+escPath(base)+"..."+escPath(head), nil, &raw); err != nil {
+		return Comparison{}, err
+	}
+	out := Comparison{AheadBy: raw.AheadBy, BehindBy: raw.BehindBy, HTMLURL: raw.HTMLURL}
+	for i := len(raw.Commits) - 1; i >= 0 && len(out.Commits) < 20; i-- {
+		cm := raw.Commits[i]
+		msg, _, _ := strings.Cut(cm.Commit.Message, "\n")
+		out.Commits = append(out.Commits, CompareCommit{SHA: cm.SHA, Message: strings.TrimSpace(msg), Author: cm.Commit.Author.Name, Date: cm.Commit.Author.Date})
+	}
+	return out, nil
+}

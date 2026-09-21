@@ -277,6 +277,11 @@ func describe(name string, c *callCtx) string {
 		return "run `docker compose " + c.str("action") + "` for stack " + st + " on " + h
 	case "update_compose":
 		return "overwrite the compose file of stack " + st + " on " + h + " and apply it"
+	case "pull_and_rebuild":
+		if c.boolean("force") {
+			return "reset stack " + st + " on " + h + " to its latest git commit (discarding local changes) and rebuild it"
+		}
+		return "pull the latest git commit for stack " + st + " on " + h + " and rebuild it"
 	case "pull_image":
 		return "pull image " + c.str("image")
 	case "prune_images":
@@ -563,6 +568,17 @@ func (p *Provider) run(ctx context.Context, name string, c *callCtx) (string, er
 			return "", err
 		}
 		id, err := p.stacks.Action(ctx, r.ID, c.str("stack"), c.str("action"), c.actor)
+		if err != nil {
+			return "", err
+		}
+		return p.waitJob(ctx, id), nil
+
+	case "pull_and_rebuild":
+		r, err := p.host(ctx, c, c.str("host"))
+		if err != nil {
+			return "", err
+		}
+		id, err := p.git.PullAndRebuild(ctx, r.ID, c.str("stack"), model.StackGitUpdate{Force: c.boolean("force"), PullImages: c.boolean("pull_images"), NoCache: c.boolean("no_cache")}, c.actor)
 		if err != nil {
 			return "", err
 		}

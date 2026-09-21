@@ -132,6 +132,20 @@ and delete images in Settings → Registries; **Reclaim space** garbage-collects
 talks to HTTP registries listed in `insecure-registries` (`/etc/docker/daemon.json`), except on localhost — serve
 Dockhand over HTTPS to avoid configuring hosts.
 
+### Pull & rebuild
+
+Any stack that came from git has **Pull & rebuild** — `git pull` then `docker compose up -d --build`:
+
+- **Deployed from GitHub by Dockhand**: the branch head is fetched through the GitHub API (no git or token on
+  the host). Files deleted from the repo are removed from the stack folder too, like a real pull; files the app
+  created there, and `.env`, are left alone.
+- **A git clone on the host** (you cloned it and ran compose yourself): Dockhand runs git in that folder with the
+  host's own credentials. It fast-forwards; if files were edited on the host or it has local commits, it asks
+  before resetting to the remote (**Discard local changes** = `git reset --hard`). Untracked files are kept.
+
+The dialog lists the commits you're about to get first, and can also pull newer base images or rebuild without
+cache. MCP clients get the same as the `pull_and_rebuild` tool.
+
 ### GitHub
 
 Personal access tokens work out of the box. For the OAuth device flow set `GITHUB_OAUTH_CLIENT_ID`; for a

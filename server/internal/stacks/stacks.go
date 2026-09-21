@@ -270,6 +270,12 @@ func (s *Service) remember(hostID, name, content string) {
 }
 
 // locate returns the stack row, or a synthetic row for a discovered project.
+// Locate finds a stack by name, whether Dockhand manages it or only discovered
+// it from running containers. The bool reports whether it is managed.
+func (s *Service) Locate(ctx context.Context, hostID, name string) (Row, bool, error) {
+	return s.locate(ctx, hostID, name)
+}
+
 func (s *Service) locate(ctx context.Context, hostID, name string) (Row, bool, error) {
 	r, err := s.Row(ctx, hostID, name)
 	if err == nil {

@@ -9,6 +9,7 @@ import { EmptyState, Skel } from "../ui";
 import { Icon } from "../icons";
 import { useShell } from "../shell/context";
 import { impactDetails } from "@/components/impact/Impact";
+import { PullRebuildDialog } from "./PullRebuildDialog";
 import { trackJob } from "./jobs";
 
 const STATUS_DOT: Record<Stack["status"], string> = { running: C.ok, partial: C.warn, stopped: "#9aa1ad" };
@@ -79,7 +80,10 @@ function StackCard({ s, hostId }: { s: Stack; hostId: string }) {
   const dot = STATUS_DOT[s.status];
   const running = s.services.filter((v) => v.state === "running").length;
   const isGit = s.source === "git";
-  const primary = s.status === "stopped" ? { label: "Start", action: "up" } : isGit ? { label: "Redeploy", action: "redeploy" } : { label: "Deploy", action: "redeploy" };
+  // Stacks from git (deployed from GitHub, or a clone on the host) get "Pull & rebuild".
+  const maybeGit = isGit || s.source === "discovered";
+  const [pullOpen, setPullOpen] = useState(false);
+  const primary = s.status === "stopped" ? { label: "Start", action: "up" } : { label: "Deploy", action: "redeploy" };
   const inv = [`/api/hosts/${hostId}`, "/api/containers", "/api/overview"];
 
   const run = async (action: string, title: string, done: string) => {
@@ -126,10 +130,24 @@ function StackCard({ s, hostId }: { s: Stack; hostId: string }) {
           {running}/{s.services.length} running
         </span>
         <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {maybeGit && (
+            <button
+              className={isGit && s.status !== "stopped" ? "btn-primary-sm" : "btn2"}
+              onClick={() => setPullOpen(true)}
+              title="git pull, then docker compose up -d --build"
+              style={isGit && s.status !== "stopped" ? { height: 32, padding: "0 14px", borderRadius: 11, border: 0, background: "var(--btn)", color: "var(--btn-ink)", fontSize: 12.5, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 } : { height: 32, padding: "0 12px", borderRadius: 11, fontSize: 12.5, display: "flex", alignItems: "center", gap: 6 }}
+            >
+              <Icon name="branch" size={13} />
+              Pull &amp; rebuild
+            </button>
+          )}
+          {pullOpen && <PullRebuildDialog hostId={hostId} stack={s.name} onClose={() => setPullOpen(false)} />}
+          {!(isGit && s.status !== "stopped") && (
           <button className="btn-primary-sm" disabled={!!busy} onClick={() => run(primary.action, `${primary.label === "Start" ? "Starting" : "Redeploying"} ${s.name}`, `${s.name} ${primary.label === "Start" ? "started" : "redeployed"}`)} style={{ height: 32, padding: "0 14px", borderRadius: 11, border: 0, background: "var(--btn)", color: "var(--btn-ink)", fontSize: 12.5, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
             {busy === primary.action && <span className="spinner" style={{ width: 11, height: 11 }} />}
             {primary.label}
           </button>
+          )}
           <button className="btn2" style={{ height: 32, padding: "0 12px", borderRadius: 11, fontSize: 12.5 }} onClick={() => openDialog({ type: "compose", hostId, stack: s.name })}>
             Edit compose
           </button>

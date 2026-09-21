@@ -125,6 +125,15 @@ func Catalog() []Tool {
 				"stack":  stackProp(),
 				"action": prop{"type": "string", "enum": []string{"up", "down", "stop", "restart", "pull", "redeploy"}, "description": "Action to perform."},
 			}, "host", "stack", "action"),
+		tool(GroupStacks, "pull_and_rebuild", true,
+			"Update a stack that came from git: fetch the latest commit on its branch (for stacks deployed from GitHub, or a git clone on the host) and run docker compose up -d --build. Refuses when a host checkout has local changes unless force is set.",
+			prop{
+				"host":        hostProp(),
+				"stack":       stackProp(),
+				"force":       prop{"type": "boolean", "description": "Discard local changes in the host's checkout (git reset --hard to the remote branch)."},
+				"pull_images": prop{"type": "boolean", "description": "Pull newer base images while building."},
+				"no_cache":    prop{"type": "boolean", "description": "Rebuild every layer without the build cache."},
+			}, "host", "stack"),
 		tool(GroupStacks, "update_compose", true,
 			"Replace a stack's compose file with new YAML content and apply it (docker compose up -d). The content is validated before it is written.",
 			prop{

@@ -5,14 +5,14 @@ import "testing"
 func TestClassify(t *testing.T) {
 	units := map[string]bool{"nginx": true, "postgresql": true}
 	cases := []struct {
-		pkg    string
-		kind   string
-		svc    string
+		pkg  string
+		kind string
+		svc  string
 	}{
 		{"linux-image-6.8.0-45-generic", "reboot", ""},
 		{"linux-headers-6.8.0-45", "none", ""},
 		{"docker-ce", "docker", ""},
-		{"docker-ce-cli", "none", ""},      // the CLI alone doesn't restart the daemon
+		{"docker-ce-cli", "none", ""}, // the CLI alone doesn't restart the daemon
 		{"docker-compose-plugin", "none", ""},
 		{"containerd.io", "docker", ""},
 		{"libc6", "services", ""},

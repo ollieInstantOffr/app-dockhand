@@ -224,6 +224,8 @@ type deployParams struct {
 	env         []model.KV
 	autoDeploy  bool
 	actor       string
+	pullImages  bool // pull newer base images while building
+	noCache     bool // rebuild every layer
 }
 
 // prepare validates a deploy request and resolves its defaults (shared by Deploy and DryRun).
@@ -313,7 +315,8 @@ func (s *Service) runDeploy(ctx context.Context, j *jobs.Job, p deployParams) er
 
 	j.Step("Uploading to host", p.path)
 	counter := &countingReader{r: body}
-	cmd := "mkdir -p " + util.Shq(p.path) + " && tar xzf - --strip-components=1 -C " + util.Shq(p.path)
+	// -v lists what the archive contains, so files deleted from the repo can be removed below.
+	cmd := "mkdir -p " + util.Shq(p.path) + " && tar xzvf - --strip-components=1 -C " + util.Shq(p.path)
 	j.Log("cmd", "$ "+cmd)
 	res, err := conn.Exec(ctx, cmd, counter)
 	if err != nil {
@@ -323,6 +326,7 @@ func (s *Service) runDeploy(ctx context.Context, j *jobs.Job, p deployParams) er
 		return fmt.Errorf("extract on host: %w", err)
 	}
 	j.Done(fmt.Sprintf("%s → %s", util.HumanBytes(counter.n), p.path))
+	s.pruneDeleted(ctx, j, conn, p.path, archiveFiles(res.Stdout+"\n"+res.Stderr))
 
 	composePath := path.Join(p.path, p.composeFile)
 	envDir := path.Dir(composePath)
@@ -339,7 +343,23 @@ func (s *Service) runDeploy(ctx context.Context, j *jobs.Job, p deployParams) er
 	row := stacks.Row{HostID: p.hostID, Name: p.name, Path: p.path, ComposeFile: p.composeFile, Source: "git",
 		AccountID: &p.account.ID, Repo: p.owner + "/" + p.repo, Branch: p.branch, SHA: sha, AutoDeploy: p.autoDeploy, Env: p.env}
 	j.Step("Building & starting", "docker compose up -d --build")
-	if err := dockerops.RunLogged(ctx, conn, j, stacks.ComposeCmd(row, "up -d --build --remove-orphans")); err != nil {
+	if p.pullImages || p.noCache {
+		flags := []string{}
+		if p.pullImages {
+			flags = append(flags, "--pull")
+		}
+		if p.noCache {
+			flags = append(flags, "--no-cache")
+		}
+		if err := dockerops.RunLogged(ctx, conn, j, stacks.ComposeCmd(row, "build "+strings.Join(flags, " "))); err != nil {
+			return err
+		}
+	}
+	up := "up -d --build --remove-orphans"
+	if p.pullImages {
+		up += " --pull always"
+	}
+	if err := dockerops.RunLogged(ctx, conn, j, stacks.ComposeCmd(row, up)); err != nil {
 		return err
 	}
 
@@ -569,3 +589,77 @@ func (s *Service) checksFailed(ctx context.Context, r stacks.Row, sha string) st
 
 // ErrBadSignature is returned for webhook deliveries with an invalid signature.
 var ErrBadSignature = errors.New("invalid webhook signature")
+
+// manifestFile records which files the last deploy extracted, so the next one
+// can remove files that were deleted from the repository — what git pull would
+// do — without touching anything the app itself created in the stack folder.
+const manifestFile = ".dockhand-files"
+
+// archiveFiles turns tar -v output ("owner-repo-sha/path/to/file") into repo-relative file paths.
+// GitHub archives have a single top-level folder; if the listing doesn't look like
+// that (a tar that prints already-stripped names), it returns nil so nothing is pruned.
+func archiveFiles(out string) []string {
+	var files []string
+	top := ""
+	for _, l := range strings.Split(out, "\n") {
+		l = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(l), "x "))
+		if l == "" {
+			continue
+		}
+		head, rel, _ := strings.Cut(l, "/")
+		if top == "" {
+			top = head
+		} else if head != top {
+			return nil // not one top-level folder: don't guess
+		}
+		if strings.HasSuffix(l, "/") || rel == "" || strings.HasPrefix(rel, "/") || strings.Contains(rel, "..") {
+			continue
+		}
+		files = append(files, rel)
+	}
+	return files
+}
+
+func (s *Service) pruneDeleted(ctx context.Context, j *jobs.Job, conn *hosts.Conn, dir string, now []string) {
+	if len(now) == 0 {
+		return // couldn't read the archive listing; leave everything in place
+	}
+	manifest := path.Join(dir, manifestFile)
+	prev, _ := conn.Exec(ctx, "cat "+util.Shq(manifest)+" 2>/dev/null || true", nil)
+	keep := map[string]bool{}
+	for _, f := range now {
+		keep[f] = true
+	}
+	var gone []string
+	for _, f := range strings.Split(prev.Stdout, "\n") {
+		f = strings.TrimSpace(f)
+		if f == "" || keep[f] || f == ".env" || f == manifestFile || strings.HasPrefix(f, "/") || strings.Contains(f, "..") {
+			continue
+		}
+		gone = append(gone, f)
+	}
+	if len(gone) > 0 && len(gone) <= 2000 {
+		for i := 0; i < len(gone); i += 200 {
+			end := i + 200
+			if end > len(gone) {
+				end = len(gone)
+			}
+			quoted := make([]string, 0, end-i)
+			for _, f := range gone[i:end] {
+				quoted = append(quoted, util.Shq(f))
+			}
+			if _, err := conn.Exec(ctx, "cd "+util.Shq(dir)+" && rm -f -- "+strings.Join(quoted, " "), nil); err != nil {
+				j.Logf("warn", "couldn't remove files deleted from the repository: %v", err)
+				break
+			}
+		}
+		shown := gone
+		if len(shown) > 10 {
+			shown = shown[:10]
+		}
+		j.Logf("info", "removed %d file(s) deleted from the repository: %s%s", len(gone), strings.Join(shown, ", "), map[bool]string{true: "…", false: ""}[len(gone) > 10])
+	}
+	if err := stacks.WriteFile(ctx, conn, manifest, []byte(strings.Join(now, "\n")+"\n")); err != nil {
+		j.Logf("warn", "couldn't record the file list: %v", err)
+	}
+}

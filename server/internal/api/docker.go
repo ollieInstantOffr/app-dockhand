@@ -521,3 +521,33 @@ func (s *Server) listJobs(w http.ResponseWriter, r *http.Request) {
 	}
 	ok(w, list)
 }
+
+// stackGit reports how far a git-backed stack is behind its branch.
+func (s *Server) stackGit(w http.ResponseWriter, r *http.Request) {
+	id, okk := s.hostID(w, r)
+	if !okk {
+		return
+	}
+	ctx, cancel := reqCtx(r, 60*time.Second)
+	defer cancel()
+	st, err := s.Git.GitStatus(ctx, id, chi.URLParam(r, "name"))
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	ok(w, st)
+}
+
+// stackPullRebuild is git pull + docker compose up -d --build for a git-backed stack.
+func (s *Server) stackPullRebuild(w http.ResponseWriter, r *http.Request) {
+	id, okk := s.hostID(w, r)
+	if !okk {
+		return
+	}
+	var in model.StackGitUpdate
+	if r.ContentLength != 0 && !decode(w, r, &in) {
+		return
+	}
+	jid, err := s.Git.PullAndRebuild(r.Context(), id, chi.URLParam(r, "name"), in, actor(r))
+	jobRef(w, jid, err)
+}
