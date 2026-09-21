@@ -1,24 +1,35 @@
 "use client";
 
-import { useState } from "react";
-import { post, useApi } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { errMsg, invalidate, post, useApi, useJob } from "@/lib/api";
 import { C, ago, plural, shortSha } from "@/lib/format";
 import type { Impact, JobRef, StackGitStatus } from "@/lib/types";
 import { Dialog, DialogHeader, ToggleRow } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { useShell } from "@/components/shell/context";
 import { trackJob } from "./jobs";
+import { JobProgress } from "@/components/jobs/JobProgress";
 
 /**
  * Pull & rebuild: git pull + docker compose up -d --build for a stack that
  * came from git — deployed by Dockhand from GitHub, or cloned onto the host.
  * Shows the commits you're about to get before anything changes.
  */
-export function PullRebuildDialog({ hostId, stack, onClose }: { hostId: string; stack: string; onClose: () => void }) {
+export function PullRebuildDialog({ hostId, stack, onClose, jobId: startJob }: { hostId: string; stack: string; onClose: () => void; jobId?: string }) {
   const shell = useShell();
   const base = `/api/hosts/${hostId}/stacks/${encodeURIComponent(stack)}`;
-  const { data: st, error } = useApi<StackGitStatus>(`${base}/git`, { revalidateOnFocus: false });
-  const { data: blast } = useApi<Impact>(`${base}/impact?action=down`, { revalidateOnFocus: false });
+  // Once started, the dialog follows the job instead of closing.
+  const [jobId, setJobId] = useState<string | null>(startJob ?? null);
+  const job = useJob(jobId);
+  const [startErr, setStartErr] = useState("");
+  const [starting, setStarting] = useState(false);
+  const { data: st, error } = useApi<StackGitStatus>(jobId ? null : `${base}/git`, { revalidateOnFocus: false });
+  const { data: blast } = useApi<Impact>(jobId ? null : `${base}/impact?action=down`, { revalidateOnFocus: false });
+  const inv = [`/api/hosts/${hostId}`, "/api/containers", "/api/overview", "/api/jobs"];
+  const finished = job && job.status !== "running";
+  useEffect(() => {
+    if (finished) inv.forEach((p) => invalidate(p));
+  }, [finished]); // eslint-disable-line react-hooks/exhaustive-deps
   const [force, setForce] = useState(false);
   const [pullImages, setPullImages] = useState(false);
   const [noCache, setNoCache] = useState(false);
@@ -27,14 +38,54 @@ export function PullRebuildDialog({ hostId, stack, onClose }: { hostId: string; 
   const dirtyBlocks = st?.kind === "checkout" && st.dirty > 0 && !force;
   const aheadBlocks = st?.kind === "checkout" && st.ahead > 0 && !force;
 
-  const go = () => {
-    onClose();
-    trackJob(shell, post<JobRef>(`${base}/pull-rebuild`, { force, pullImages, noCache }), {
-      title: `Pull & rebuild ${stack}`,
-      done: `${stack} rebuilt`,
-      invalidate: [`/api/hosts/${hostId}`, "/api/containers", "/api/overview"],
-    });
+  const go = async () => {
+    setStartErr("");
+    setStarting(true);
+    try {
+      const r = await post<JobRef>(`${base}/pull-rebuild`, { force, pullImages, noCache });
+      setJobId(r.jobId);
+      invalidate("/api/jobs");
+    } catch (e) {
+      setStartErr(errMsg(e));
+    } finally {
+      setStarting(false);
+    }
   };
+
+  // Closing mid-run keeps it going; a toast says when it's done.
+  const close = () => {
+    if (jobId && job?.status === "running") {
+      trackJob(shell, { jobId }, { title: `Pull & rebuild ${stack}`, done: `${stack} rebuilt`, invalidate: inv, quiet: true });
+    }
+    onClose();
+  };
+
+  if (jobId) {
+    const sha = typeof job?.result?.sha === "string" ? (job.result.sha as string) : "";
+    return (
+      <Dialog onClose={close} width={600}>
+        <DialogHeader icon="branch" title={`Pull & rebuild ${stack}`} sub={job?.status === "running" || !job ? "Running — you can close this, it keeps going" : job.status === "success" ? "Finished" : "Stopped with an error"} onClose={close} />
+        {!job ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderRadius: 14, background: "var(--fill-1)", fontSize: 13, color: "var(--ink-2)" }}>
+            <span className="spinner" style={{ width: 14, height: 14 }} />
+            Starting…
+          </div>
+        ) : (
+          <JobProgress job={job} doneText={sha ? `${stack} is now at ${shortSha(sha)}` : `${stack} rebuilt`} failedText="Pull & rebuild failed" />
+        )}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          {job?.status === "failed" && (
+            <button type="button" className="btn2 lg" onClick={() => setJobId(null)}>
+              Try again
+            </button>
+          )}
+          <button type="button" className={job?.status === "running" || !job ? "btn2 lg" : "btn"} onClick={close}>
+            {job?.status === "running" || !job ? "Run in background" : "Close"}
+          </button>
+        </div>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog onClose={onClose} width={600}>
@@ -125,13 +176,14 @@ export function PullRebuildDialog({ hostId, stack, onClose }: { hostId: string; 
         </>
       )}
 
+      {startErr && <span style={{ fontSize: 12.5, color: "var(--crit-ink)", fontWeight: 600 }}>{startErr}</span>}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
         <button type="button" className="btn2 lg" onClick={onClose}>
           Cancel
         </button>
         {st && st.kind !== "none" && (
-          <button type="button" className="btn" onClick={go} disabled={dirtyBlocks || aheadBlocks}>
-            <Icon name="update" size={15} />
+          <button type="button" className="btn" onClick={go} disabled={dirtyBlocks || aheadBlocks || starting}>
+            {starting ? <span className="spinner" style={{ width: 13, height: 13 }} /> : <Icon name="update" size={15} />}
             {upToDate ? "Rebuild" : "Pull & rebuild"}
           </button>
         )}

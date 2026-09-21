@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { get, post } from "@/lib/api";
+import { get, post, useApi } from "@/lib/api";
 import { C, containerColor, halo, plural, portsText, shortSha } from "@/lib/format";
-import type { Impact, JobRef, Stack } from "@/lib/types";
+import type { Impact, Job, JobRef, Stack } from "@/lib/types";
 import { EmptyState, Skel } from "../ui";
 import { Icon } from "../icons";
 import { useShell } from "../shell/context";
 import { impactDetails } from "@/components/impact/Impact";
 import { PullRebuildDialog } from "./PullRebuildDialog";
+import { JobProgressInline } from "@/components/jobs/JobProgress";
 import { trackJob } from "./jobs";
 
 const STATUS_DOT: Record<Stack["status"], string> = { running: C.ok, partial: C.warn, stopped: "#9aa1ad" };
@@ -17,6 +18,17 @@ const STATUS_DOT: Record<Stack["status"], string> = { running: C.ok, partial: C.
 export function StacksTab({ hostId, stacks }: { hostId: string; stacks: Stack[] | undefined }) {
   const shell = useShell();
   const router = useRouter();
+  // Jobs touching this host's stacks — so a card shows its own pull, rebuild or
+  // redeploy while it runs (and a recent failure), whoever started it.
+  const { data: jobs } = useApi<Job[]>("/api/jobs?limit=40", { refresh: 3000 });
+  const jobFor = (name: string): Job | undefined => {
+    const mine = (jobs ?? []).filter((j) => j.hostId === hostId && j.result?.stack === name);
+    const live = mine.find((j) => j.status === "running");
+    if (live) return live;
+    const last = mine[0];
+    if (last?.status === "failed" && last.finishedAt && Date.now() - new Date(last.finishedAt).getTime() < 15 * 60 * 1000) return last;
+    return undefined;
+  };
   const newStack = () => shell.openDialog({ type: "compose", hostId });
 
   if (!stacks) {
@@ -67,13 +79,13 @@ export function StacksTab({ hostId, stacks }: { hostId: string; stacks: Stack[] 
         </button>
       </div>
       {stacks.map((s) => (
-        <StackCard key={s.name} s={s} hostId={hostId} />
+        <StackCard key={s.name} s={s} hostId={hostId} job={jobFor(s.name)} />
       ))}
     </div>
   );
 }
 
-function StackCard({ s, hostId }: { s: Stack; hostId: string }) {
+function StackCard({ s, hostId, job }: { s: Stack; hostId: string; job?: Job }) {
   const shell = useShell();
   const { openDialog, openContainer } = shell;
   const [busy, setBusy] = useState<string | null>(null);
@@ -83,6 +95,7 @@ function StackCard({ s, hostId }: { s: Stack; hostId: string }) {
   // Stacks from git (deployed from GitHub, or a clone on the host) get "Pull & rebuild".
   const maybeGit = isGit || s.source === "discovered";
   const [pullOpen, setPullOpen] = useState(false);
+  const [watching, setWatching] = useState<string | null>(null); // job id shown in the progress dialog
   const primary = s.status === "stopped" ? { label: "Start", action: "up" } : { label: "Deploy", action: "redeploy" };
   const inv = [`/api/hosts/${hostId}`, "/api/containers", "/api/overview"];
 
@@ -142,6 +155,7 @@ function StackCard({ s, hostId }: { s: Stack; hostId: string }) {
             </button>
           )}
           {pullOpen && <PullRebuildDialog hostId={hostId} stack={s.name} onClose={() => setPullOpen(false)} />}
+          {watching && <PullRebuildDialog hostId={hostId} stack={s.name} jobId={watching} onClose={() => setWatching(null)} />}
           {!(isGit && s.status !== "stopped") && (
           <button className="btn-primary-sm" disabled={!!busy} onClick={() => run(primary.action, `${primary.label === "Start" ? "Starting" : "Redeploying"} ${s.name}`, `${s.name} ${primary.label === "Start" ? "started" : "redeployed"}`)} style={{ height: 32, padding: "0 14px", borderRadius: 11, border: 0, background: "var(--btn)", color: "var(--btn-ink)", fontSize: 12.5, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
             {busy === primary.action && <span className="spinner" style={{ width: 11, height: 11 }} />}
@@ -159,6 +173,7 @@ function StackCard({ s, hostId }: { s: Stack; hostId: string }) {
           )}
         </div>
       </div>
+      {job && <JobProgressInline job={job} onOpen={() => setWatching(job.id)} />}
       {s.services.length > 0 && (
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {s.services.map((v) => {
